@@ -11,6 +11,20 @@ Neatly-Hotel/
 ??? README.md
 ```
 
+## Backend package layout
+
+```
+com.neatly.hotel/
+??? HotelApplication.java
+??? config/       # Cors, Security, OpenAPI/Swagger
+??? controller/   # REST endpoints
+??? service/      # Business logic (interface + impl)
+??? repository/   # JpaRepository
+??? model/        # JPA entities
+??? dto/          # Request/response objects
+??? exception/    # Global handlers + custom errors
+```
+
 ## Prerequisites
 
 - JDK 21+ (JDK 25 works; project targets Java 21)
@@ -25,25 +39,25 @@ Neatly-Hotel/
 ```bash
 cd frontend
 copy .env.example .env
-# Fill VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from Supabase > Project Settings > API
 npm install
 npm run dev
 ```
 
-### 2. Backend (local ? H2, no Supabase DB yet)
+### 2. Backend (local ? H2)
 
 ```bash
 cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-Health check: http://localhost:8080/api/health
+- Health: http://localhost:8080/api/health
+- Swagger UI: http://localhost:8080/swagger-ui.html
+- Rooms API: http://localhost:8080/api/rooms
 
 ### 3. Backend with Supabase PostgreSQL
 
 ```powershell
 cd backend
-# Values from backend/.env.example (Supabase Dashboard > Project Settings > Database)
 $env:SPRING_PROFILES_ACTIVE="supabase"
 $env:SUPABASE_DB_URL="jdbc:postgresql://..."
 $env:SUPABASE_DB_USER="postgres.YOUR_REF"
@@ -51,25 +65,8 @@ $env:SUPABASE_DB_PASSWORD="..."
 .\mvnw.cmd spring-boot:run
 ```
 
-## Architecture notes
-
-| Layer | Role |
-|-------|------|
-| Vue + `@supabase/supabase-js` | Auth / realtime / direct Supabase client features |
-| Spring Boot | Business API (`/api/**`), JPA against Supabase Postgres when profile=`supabase` |
-| Vite proxy | `/api` ? `http://localhost:8080` in development |
-
-## Git branches (recommended)
+## Git branches
 
 - `main` ? production-ready
 - `dev` ? integration / testing
 - `feat/...` ? feature work ? merge into `dev` first, then `dev` ? `main`
-
-## Scripts
-
-| Command | Where | Purpose |
-|---------|-------|---------|
-| `npm run dev` | `frontend/` | Vue dev server |
-| `npm run build` | `frontend/` | Production build |
-| `.\mvnw.cmd spring-boot:run` | `backend/` | Run API |
-| `.\mvnw.cmd test` | `backend/` | Run tests |
