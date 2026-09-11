@@ -56,13 +56,12 @@ cd backend
 
 ### 3. Backend with Supabase PostgreSQL
 
+1. Create `rooms` table: run `backend/src/main/resources/db/schema.sql` in Supabase **SQL Editor**
+2. Copy `backend/.env.example` → `backend/.env` and fill Database credentials (Session pooler, port **5432**)
+
 ```powershell
 cd backend
-$env:SPRING_PROFILES_ACTIVE="supabase"
-$env:SUPABASE_DB_URL="jdbc:postgresql://..."
-$env:SUPABASE_DB_USER="postgres.YOUR_REF"
-$env:SUPABASE_DB_PASSWORD="..."
-.\mvnw.cmd spring-boot:run
+.\run-supabase.ps1
 ```
 
 ## Git branches
