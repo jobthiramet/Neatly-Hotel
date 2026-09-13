@@ -1,17 +1,17 @@
 # Neatly-Hotel
 
-Hotel booking monorepo: **Spring Boot** API + **Vue 3** frontend + **Supabase** (PostgreSQL / Auth).
+Hotel booking monorepo: **Spring Boot** API + **Vue 3** client + **Supabase** (PostgreSQL / Auth).
 
 ## Structure
 
 ```
 Neatly-Hotel/
-??? backend/     # Java Spring Boot (port 8080)
-??? frontend/    # Vue 3 + Vite + TypeScript (port 5173)
+??? server/     # Java Spring Boot (port 8080)
+??? client/     # Vue 3 + Vite + TypeScript (port 5173)
 ??? README.md
 ```
 
-## Backend package layout
+## Server package layout
 
 ```
 com.neatly.hotel/
@@ -30,23 +30,23 @@ com.neatly.hotel/
 - JDK 21+ (JDK 25 works; project targets Java 21)
 - Node.js 22+
 - Supabase project (https://supabase.com)
-- Maven is **not** required globally ? use `mvnw` in `backend/`
+- Maven is **not** required globally ? use `mvnw` in `server/`
 
 ## Setup
 
-### 1. Frontend
+### 1. Client
 
 ```bash
-cd frontend
+cd client
 copy .env.example .env
 npm install
 npm run dev
 ```
 
-### 2. Backend (local ? H2)
+### 2. Server (local ? H2)
 
 ```bash
-cd backend
+cd server
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -54,13 +54,13 @@ cd backend
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Rooms API: http://localhost:8080/api/rooms
 
-### 3. Backend with Supabase PostgreSQL
+### 3. Server with Supabase PostgreSQL
 
-1. Create `rooms` table: run `backend/src/main/resources/db/schema.sql` in Supabase **SQL Editor**
-2. Copy `backend/.env.example` → `backend/.env` and fill Database credentials (Session pooler, port **5432**)
+1. Create `rooms` table: run `server/src/main/resources/db/schema.sql` in Supabase **SQL Editor**
+2. Copy `server/.env.example` ? `server/.env` and fill Database credentials (Session pooler, port **5432**)
 
 ```powershell
-cd backend
+cd server
 .\run-supabase.ps1
 ```
 

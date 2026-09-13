@@ -18,12 +18,12 @@ Thumbs.db
 # Logs
 *.log
 
-# Backend (Maven)
-backend/target/
-backend/.mvn/wrapper/maven-wrapper.jar
+# Server (Maven)
+server/target/
+server/.mvn/wrapper/maven-wrapper.jar
 
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/dist-ssr/
+# Client
+client/node_modules/
+client/dist/
+client/dist-ssr/
 *.local

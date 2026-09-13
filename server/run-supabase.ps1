@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $envFile = Join-Path $PSScriptRoot ".env"
 
 if (-not (Test-Path $envFile)) {
-	throw "Missing backend/.env - copy .env.example to .env and fill in Supabase values."
+	throw "Missing server/.env - copy .env.example to .env and fill in Supabase values."
 }
 
 Get-Content $envFile | ForEach-Object {
