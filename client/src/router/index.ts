@@ -16,6 +16,11 @@ const router = createRouter({
       
     },
     {
+      path: '/bookings/:bookingId/cancel',
+      name: 'cancel-booking',
+      component: () => import('../views/CancelBookingView.vue'),
+    },
+    {
       // TODO: add an admin auth guard (pending auth work).
       path: '/admin',
       component: () => import('../components/layout/AdminLayout.vue'),
