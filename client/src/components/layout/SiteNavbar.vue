@@ -1,33 +1,42 @@
 <!-- Figma: nav bar / non user (12:20 desktop, 7410:3826 mobile) + hambergur menu (7431:4779) -->
 <script setup lang="ts">
-import { onKeyStroke } from '@vueuse/core'
-import { ref, useTemplateRef } from 'vue'
-import { IconClose, IconMenu } from '@/components/icons'
-import NeatlyLogo from '@/components/NeatlyLogo.vue'
-import { navLinks } from '@/data/home'
+import { Show, UserButton } from "@clerk/vue";
+import { RouterLink } from "vue-router";
+import { Button } from "@/components/ui/button";
+import { onKeyStroke } from "@vueuse/core";
+import { ref, useTemplateRef } from "vue";
+import { IconClose, IconMenu } from "@/components/icons";
+import NeatlyLogo from "@/components/NeatlyLogo.vue";
+import { navLinks } from "@/data/home";
 
-const menuOpen = ref(false)
-const menuButton = useTemplateRef('menuButton')
+const menuOpen = ref(false);
+const menuButton = useTemplateRef("menuButton");
 
 function closeMenu() {
-  if (!menuOpen.value) return
-  menuOpen.value = false
-  menuButton.value?.focus()
+  if (!menuOpen.value) return;
+  menuOpen.value = false;
+  menuButton.value?.focus();
 }
 
-onKeyStroke('Escape', closeMenu)
+onKeyStroke("Escape", closeMenu);
 </script>
 
 <template>
   <header class="relative z-40 bg-white">
-    <nav aria-label="Main" class="mx-auto flex h-12 max-w-288 items-center justify-between px-4 lg:h-25">
+    <nav
+      aria-label="Main"
+      class="mx-auto flex h-12 max-w-288 items-center justify-between px-4 lg:h-25"
+    >
       <a href="/" class="rounded-sm outline-none is-focus:ring-2 is-focus:ring-ring">
         <NeatlyLogo class="h-6 lg:h-11.25" />
       </a>
 
       <ul class="ml-12 hidden flex-1 items-center gap-2 lg:flex">
         <li v-for="link in navLinks" :key="link.href">
-          <a :href="link.href.startsWith('#') ? `/${link.href}` : link.href" class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring">
+          <a
+            :href="link.href.startsWith('#') ? `/${link.href}` : link.href"
+            class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring"
+          >
             {{ link.label }}
           </a>
         </li>
@@ -42,16 +51,12 @@ onKeyStroke('Escape', closeMenu)
         </li>
       </ul>
 
-      <div class="hidden items-center gap-4 lg:flex">
-        <RouterLink
-          to="/booking-history"
-          class="flex items-center gap-2 rounded-sm text-body2 text-gray-800 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring"
-        >
-          <span class="flex size-8 items-center justify-center rounded-full bg-orange-100 font-semibold text-orange-600">
-            K
-          </span>
-          <span class="font-medium">Kate Cho</span>
-        </RouterLink>
+      <div class="hidden items-center gap-3 lg:flex">
+        <Show when="signed-out">
+          <Button as-child variant="ghost"><RouterLink to="/sign-in">Log in</RouterLink></Button>
+          <Button as-child><RouterLink to="/sign-up">Sign up</RouterLink></Button>
+        </Show>
+        <Show when="signed-in"><UserButton /></Show>
       </div>
 
       <button
@@ -75,7 +80,11 @@ onKeyStroke('Escape', closeMenu)
     >
       <ul>
         <li v-for="link in navLinks" :key="link.href">
-          <a :href="link.href.startsWith('#') ? `/${link.href}` : link.href" class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring" @click="closeMenu">
+          <a
+            :href="link.href.startsWith('#') ? `/${link.href}` : link.href"
+            class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring"
+            @click="closeMenu"
+          >
             {{ link.label }}
           </a>
         </li>
@@ -90,18 +99,17 @@ onKeyStroke('Escape', closeMenu)
           </RouterLink>
         </li>
       </ul>
-      <hr class="my-4 border-gray-300">
-      <div class="px-4 py-2">
-        <RouterLink
-          to="/booking-history"
-          class="flex items-center gap-3 py-2 text-body2 text-gray-800"
-          @click="closeMenu"
-        >
-          <span class="flex size-8 items-center justify-center rounded-full bg-orange-100 font-semibold text-orange-600">
-            K
-          </span>
-          <span class="font-medium">Kate Cho</span>
-        </RouterLink>
+      <hr class="my-4 border-gray-300" />
+      <div class="flex items-center gap-3">
+        <Show when="signed-out">
+          <Button as-child variant="ghost"
+            ><RouterLink to="/sign-in" @click="closeMenu">Log in</RouterLink></Button
+          >
+          <Button as-child
+            ><RouterLink to="/sign-up" @click="closeMenu">Sign up</RouterLink></Button
+          >
+        </Show>
+        <Show when="signed-in"><UserButton /></Show>
       </div>
     </div>
   </header>
