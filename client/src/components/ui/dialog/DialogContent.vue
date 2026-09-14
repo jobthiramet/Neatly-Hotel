@@ -41,9 +41,9 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       <DialogClose
         v-if="showCloseButton"
         data-slot="dialog-close"
-        class="absolute top-2 right-6 flex size-10 cursor-pointer items-center justify-center rounded-sm text-gray-500 outline-none is-hover:text-gray-700 is-focus:ring-2 is-focus:ring-ring"
+        class="absolute top-2 right-6 flex h-10 w-10.25 cursor-pointer items-center justify-center rounded-sm text-gray-500 outline-none is-hover:text-gray-700 is-focus:ring-2 is-focus:ring-ring"
       >
-        <IconClose class="size-10" />
+        <IconClose class="h-10 w-10.25" />
         <span class="sr-only">Close</span>
       </DialogClose>
     </DialogContent>

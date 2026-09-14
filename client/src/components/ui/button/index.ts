@@ -15,7 +15,7 @@ export const buttonVariants = cva(
       },
       size: {
         default: 'px-7.75 py-3.75', // 32/16 in Figma minus the 1px border
-        icon: 'size-10 text-gray-500 is-hover:text-gray-700 [&_svg]:size-10',
+        icon: 'size-10 text-gray-500 is-hover:text-gray-700 [&_svg]:size-6',
       },
     },
     compoundVariants: [
