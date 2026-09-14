@@ -64,6 +64,12 @@ cd server
 .\run-supabase.ps1
 ```
 
+## Design system
+
+The client UI uses the Neatly design system (tokens + shadcn-vue components) from Figma.
+Read **[client/DESIGN_SYSTEM.md](client/DESIGN_SYSTEM.md)** before building UI. It covers tokens, components and lint rules.
+With `npm run dev` running, the live showcase is at http://localhost:5173/design-system.
+
 ## Git branches
 
 - `main` ? production-ready
