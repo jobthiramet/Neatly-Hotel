@@ -1,0 +1,159 @@
+/*
+ * Neatly design tokens — the ONLY file allowed to contain color literals.
+ *
+ * Source of truth: Figma "Neatly" → 🎨 DESIGN SYSTEM
+ * https://www.figma.com/design/T5JCNQ0DkLasdfWiUjD8ct/Neatly?node-id=0-1
+ *
+ * Names mirror the Figma variables (e.g. `orange/500` → `--color-orange-500` → `bg-orange-500`).
+ * Add a token in Figma first, then here. See client/DESIGN_SYSTEM.md.
+ */
+
+@theme {
+  /* Disable Tailwind's default scales so only Neatly tokens produce utilities. */
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+
+  /* ── Colors: green (Figma `green/*`) ─────────────────────────── */
+  --color-green-100: #f1f5f3;
+  --color-green-200: #e6ebe9;
+  --color-green-300: #d5dfda;
+  --color-green-400: #abc0b4;
+  --color-green-500: #81a08f;
+  --color-green-600: #5d7b6a;
+  --color-green-700: #465c50;
+  --color-green-800: #2f3e35;
+  --color-green-900: #171f1b;
+
+  /* ── Colors: orange (Figma `orange/*`) ───────────────────────── */
+  --color-orange-100: #faede8;
+  --color-orange-200: #f9dace;
+  --color-orange-300: #f3b59c;
+  --color-orange-400: #ed906b;
+  --color-orange-500: #e76b39;
+  --color-orange-600: #c14817;
+  --color-orange-700: #803010;
+  --color-orange-800: #631f04;
+  --color-orange-900: #401808;
+
+  /* ── Colors: gray (Figma `gray/*`) ───────────────────────────── */
+  --color-gray-100: #f6f7fc;
+  --color-gray-200: #f1f2f6;
+  --color-gray-300: #e4e6ed;
+  --color-gray-400: #d6d9e4;
+  --color-gray-500: #c8ccdb;
+  --color-gray-600: #9aa1b9;
+  --color-gray-700: #646d89;
+  --color-gray-800: #424c6b;
+  --color-gray-900: #2a2e3f;
+
+  /* ── Colors: utility (Figma `utility/*`) ─────────────────────── */
+  --color-white: #fff;
+  --color-black: #000;
+  --color-red: #b61515;
+  --color-bg: #f7f7fb;
+
+  /*
+   * ── Colors: room status (code-only) ─────────────────────────
+   * Unbound hex values from the Figma `status` badge component.
+   * Not defined as Figma variables — keep in sync manually.
+   */
+  --color-status-neutral: #6e7288;
+  --color-status-neutral-subtle: #f0f1f8;
+  --color-status-info: #084baf;
+  --color-status-info-subtle: #e4ecff;
+  --color-status-success: #006753;
+  --color-status-success-subtle: #e5fffa;
+  --color-status-danger: #a50606;
+  --color-status-danger-subtle: #ffe5e5;
+  --color-status-warning: #766a00;
+  --color-status-warning-subtle: #fff9e5;
+
+  /* ── Font families ───────────────────────────────────────────── */
+  --font-serif: "Noto Serif Display", ui-serif, georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-button: "Open Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /*
+   * ── Text styles (Figma `headline1`…`body3`) ─────────────────
+   * Figma letter spacing "-2" = -2%.
+   */
+  --text-h1: 5.5rem;
+  --text-h1--line-height: 1.25;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h1--font-weight: 500;
+  --text-h2: 4.25rem;
+  --text-h2--line-height: 1.25;
+  --text-h2--letter-spacing: -0.02em;
+  --text-h2--font-weight: 500;
+  --text-h3: 2.75rem;
+  --text-h3--line-height: 1.25;
+  --text-h3--letter-spacing: -0.02em;
+  --text-h3--font-weight: 500;
+  --text-h4: 1.75rem;
+  --text-h4--line-height: 1.5;
+  --text-h4--letter-spacing: -0.02em;
+  --text-h4--font-weight: 600;
+  --text-h5: 1.25rem;
+  --text-h5--line-height: 1.5;
+  --text-h5--letter-spacing: -0.02em;
+  --text-h5--font-weight: 600;
+  --text-body1: 1rem;
+  --text-body1--line-height: 1.5;
+  --text-body1--letter-spacing: -0.02em;
+  --text-body1--font-weight: 400;
+  --text-body2: 0.875rem;
+  --text-body2--line-height: 1.5;
+  --text-body2--letter-spacing: -0.02em;
+  --text-body2--font-weight: 500;
+  --text-body3: 0.75rem;
+  --text-body3--line-height: 1.5;
+  --text-body3--letter-spacing: -0.02em;
+  --text-body3--font-weight: 500;
+
+  /* Button label — Open Sans SemiBold 16/16 (no Figma text style). */
+  --text-button: 1rem;
+  --text-button--line-height: 1rem;
+  --text-button--letter-spacing: 0;
+  --text-button--font-weight: 600;
+
+  /* ── Radius (no Figma variable; every component uses 4px) ────── */
+  --radius: 0.25rem;
+
+  /* ── Effects (Figma `shadow`) ────────────────────────────────── */
+  --shadow-md: 4px 4px 16px 0 #00000014;
+  --shadow-modal: 2px 2px 12px 0 #4032851f;
+}
+
+/* shadcn-vue semantic aliases → Neatly palette */
+:root {
+  --background: var(--color-white);
+  --foreground: var(--color-gray-900);
+  --card: var(--color-white);
+  --card-foreground: var(--color-gray-900);
+  --popover: var(--color-white);
+  --popover-foreground: var(--color-gray-700);
+  --primary: var(--color-orange-600);
+  --primary-foreground: var(--color-white);
+  --secondary: var(--color-white);
+  --secondary-foreground: var(--color-orange-500);
+  --muted: var(--color-gray-200);
+  --muted-foreground: var(--color-gray-600);
+  --accent: var(--color-orange-100);
+  --accent-foreground: var(--color-orange-500);
+  --destructive: var(--color-red);
+  --border: var(--color-gray-400);
+  --input: var(--color-gray-400);
+  --ring: var(--color-orange-500);
+  --sidebar: var(--color-green-800);
+  --sidebar-foreground: var(--color-green-300);
+  --sidebar-accent: var(--color-green-700);
+  --sidebar-primary: var(--color-green-600);
+  --sidebar-primary-foreground: var(--color-green-100);
+  --sidebar-border: var(--color-green-700);
+}
