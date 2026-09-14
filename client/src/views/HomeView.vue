@@ -8,7 +8,12 @@ import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import RoomSearchForm from '@/components/RoomSearchForm.vue'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
-import { aboutParagraphs, facilities, hotelPhotos, rooms, testimonials } from '@/data/home'
+import { facilities, hotelPhotos, rooms, testimonials } from '@/data/home'
+import { useHotelStore } from '@/stores/hotel'
+
+// ── About: name and description are edited in admin / hotel information ───
+const hotel = useHotelStore()
+const aboutParagraphs = computed(() => hotel.description.split(/\n\s*\n/).filter(p => p.trim()))
 
 // ── About: photo slider ────────────────────────────────────────────────────
 // Embla's loop needs the slides to overflow the viewport; two copies of the
@@ -53,7 +58,7 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
     <!-- About -->
     <section id="about" aria-labelledby="about-title" class="bg-bg pt-10 pb-10 lg:pt-29 lg:pb-25">
       <div class="mx-auto max-w-288 px-4">
-        <h2 id="about-title" class="font-serif text-h3 text-green-800 lg:text-h2">Neatly Hotel</h2>
+        <h2 id="about-title" class="font-serif text-h3 text-green-800 lg:text-h2">{{ hotel.name }}</h2>
         <div class="mt-10 flex flex-col gap-6 text-body1 text-gray-700 lg:mt-13 lg:pl-48">
           <p v-for="paragraph in aboutParagraphs" :key="paragraph">{{ paragraph }}</p>
         </div>

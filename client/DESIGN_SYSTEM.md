@@ -220,6 +220,34 @@ const checkIn = shallowRef<DateValue>()
 </Stepper>
 ```
 
+### Textarea — `admin / hotel information`
+
+Multi-line `Input`: same states, same `aria-invalid` error styling. Line breaks are preserved in the value.
+
+```vue
+<FormField label="Hotel description *" for="description" :error="errors.description">
+  <Textarea id="description" v-model="description" rows="8" :aria-invalid="!!errors.description" aria-describedby="description-error" />
+</FormField>
+```
+
+### ImageUpload — `admin / hotel information / hotel logo`
+
+`v-model` is an image URL, a picked `File`, or `null`. Shows a preview with a red remove button, or an upload box when empty.
+Object URLs are revoked on remove, replace and unmount. File type and size checks belong in the parent form; other attrs (`aria-invalid`, `aria-describedby`) go to the file input.
+
+```vue
+<ImageUpload id="logo" v-model="logo" accept="image/png,image/jpeg" :aria-invalid="!!errors.logo" aria-describedby="logo-error" />
+```
+
+### Toast — shadcn-vue `sonner`
+
+`<Toaster />` is mounted once in `App.vue`. Call `toast` from `vue-sonner` anywhere.
+
+```ts
+import { toast } from 'vue-sonner'
+toast.success('Hotel information updated')
+```
+
 ### MenuLink — `menu link` (80:1381), admin sidebar
 
 ```vue
