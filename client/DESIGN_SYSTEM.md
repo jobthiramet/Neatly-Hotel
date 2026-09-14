@@ -228,6 +228,24 @@ const checkIn = shallowRef<DateValue>()
 </MenuLink>
 ```
 
+### Carousel — `home / image slider` (17:53)
+
+shadcn-vue carousel on [Embla](https://www.embla-carousel.com). Pass Embla options via `opts`.
+Arrows are white outline circles with a translucent black fill so they stay visible over photos. Arrow keys work when the carousel has focus.
+With `loop: true`, the slides must overflow the viewport (duplicate short lists).
+
+```vue
+<Carousel :opts="{ loop: true, align: 'center' }" aria-label="Hotel photos">
+  <CarouselContent>
+    <CarouselItem v-for="photo in photos" :key="photo.src" class="basis-auto">
+      <img :src="photo.src" :alt="photo.alt">
+    </CarouselItem>
+  </CarouselContent>
+  <CarouselPrevious aria-label="Previous image" />
+  <CarouselNext aria-label="Next image" />
+</Carousel>
+```
+
 ### NeatlyLogo — `logo` (12:7)
 
 ```vue

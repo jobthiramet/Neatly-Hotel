@@ -10,6 +10,7 @@ import NeatlyLogo from '@/components/NeatlyLogo.vue'
 import { Badge, roomStatusTone } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import { Checkbox, CheckboxLabel } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -112,6 +113,7 @@ const nav = [
   ['payment-option', 'Payment option'],
   ['stepper', 'Stepper'],
   ['menu-link', 'Menu link'],
+  ['carousel', 'Carousel'],
   ['logo', 'Logo'],
 ] as const
 </script>
@@ -527,6 +529,21 @@ const nav = [
               </MenuLink>
             </div>
           </div>
+        </ShowcaseSection>
+
+        <!-- ── Carousel ───────────────────────────────────────────── -->
+        <ShowcaseSection id="carousel" title="Carousel" figma="home / image slider (17:53)">
+          <Carousel :opts="{ loop: true }" aria-label="Carousel demo" class="overflow-hidden rounded-sm">
+            <CarouselContent>
+              <CarouselItem v-for="n in 6" :key="n" class="basis-1/3">
+                <div class="flex h-40 items-center justify-center rounded-sm bg-green-700 text-h4 text-white">
+                  {{ n }}
+                </div>
+              </CarouselItem>
+            </CarouselContent>
+            <CarouselPrevious aria-label="Previous slide" />
+            <CarouselNext aria-label="Next slide" />
+          </Carousel>
         </ShowcaseSection>
 
         <!-- ── Logo ───────────────────────────────────────────────── -->
