@@ -123,7 +123,7 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
         >
           <img :src="room.image" :alt="room.alt" width="1600" height="1067" loading="lazy" class="absolute inset-0 -z-10 size-full object-cover transition-transform duration-500 group-hover:scale-105">
           <div class="absolute inset-0 -z-10 bg-linear-to-t from-black/50 to-black/0" />
-          <div class="flex h-full flex-col justify-end p-6 lg:px-15 lg:pb-20">
+          <div class="flex h-full flex-col justify-end p-6 lg:pr-6 lg:pb-20 lg:pl-15">
             <h3 class="font-serif text-h4 font-medium text-white lg:text-h3">{{ room.name }}</h3>
             <a :href="room.href" class="mt-2 inline-flex w-fit items-center gap-2 rounded-sm font-button text-button text-white outline-none is-hover:underline is-focus:ring-2 is-focus:ring-ring lg:mt-6">
               Explore Room <span class="sr-only">{{ room.name }}</span>
