@@ -14,12 +14,12 @@ export const buttonVariants = cva(
         ghost: 'text-orange-500 is-hover:text-orange-400 is-active:text-orange-600 disabled:text-gray-500',
       },
       size: {
-        default: 'px-8 py-4',
+        default: 'px-7.75 py-3.75', // 32/16 in Figma minus the 1px border
         icon: 'size-10 text-gray-500 is-hover:text-gray-700 [&_svg]:size-10',
       },
     },
     compoundVariants: [
-      { variant: 'ghost', size: 'default', class: 'px-2 py-1 [&_svg]:size-4' },
+      { variant: 'ghost', size: 'default', class: 'px-1.75 py-0.75 [&_svg]:size-4' },
     ],
     defaultVariants: {
       variant: 'primary',

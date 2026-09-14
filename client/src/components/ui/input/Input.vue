@@ -36,7 +36,7 @@ const invalid = computed(() => attrs['aria-invalid'] === true || attrs['aria-inv
       v-model="modelValue"
       data-slot="input"
       :class="cn(
-        'w-full min-w-0 rounded-sm border border-input bg-white py-3 pr-4 pl-3 text-body1 tracking-normal text-black transition-colors outline-none placeholder:text-gray-600 is-focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-600 aria-invalid:border-red',
+        'w-full min-w-0 rounded-sm border border-input bg-white py-2.75 pr-3.75 pl-2.75 text-body1 tracking-normal text-black transition-colors outline-none placeholder:text-gray-600 is-focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-600 aria-invalid:border-red',
         invalid && 'pr-10',
         props.class,
       )"
