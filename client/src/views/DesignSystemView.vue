@@ -15,12 +15,15 @@ import { Checkbox, CheckboxLabel } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { FormField } from '@/components/ui/form-field'
+import { ImageUpload } from '@/components/ui/image-upload'
 import { Input } from '@/components/ui/input'
 import { MenuLink } from '@/components/ui/menu-link'
 import { PaymentOption } from '@/components/ui/payment-option'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Stepper, StepperIndicator, StepperItem, StepperTitle, StepperTrigger } from '@/components/ui/stepper'
+import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'vue-sonner'
 
 const FIGMA_URL = 'https://www.figma.com/design/T5JCNQ0DkLasdfWiUjD8ct/Neatly?node-id=0-1'
 
@@ -98,6 +101,7 @@ const paymentMethod = ref('cash')
 const step = ref(2)
 const steps = ['Basic Information', 'Special Request', 'Payment Method']
 const agreed = ref(true)
+const demoImage = ref<string | File | null>(null)
 
 const nav = [
   ['colors', 'Colors'],
@@ -112,6 +116,9 @@ const nav = [
   ['badge', 'Status badge'],
   ['payment-option', 'Payment option'],
   ['stepper', 'Stepper'],
+  ['textarea', 'Textarea'],
+  ['image-upload', 'Image upload'],
+  ['toast', 'Toast'],
   ['menu-link', 'Menu link'],
   ['carousel', 'Carousel'],
   ['logo', 'Logo'],
@@ -505,6 +512,42 @@ const nav = [
           <p class="mt-4 text-body3 text-gray-600">
             finish · current · none
           </p>
+        </ShowcaseSection>
+
+        <!-- ── Textarea ───────────────────────────────────────────── -->
+        <ShowcaseSection id="textarea" title="Textarea" figma="admin / hotel information">
+          <div class="grid max-w-150 gap-6">
+            <FormField label="Default" for="demo-textarea">
+              <Textarea id="demo-textarea" rows="3" placeholder="Enter a description" />
+            </FormField>
+            <FormField label="Error" for="demo-textarea-error" error="Description is required.">
+              <Textarea id="demo-textarea-error" rows="3" aria-invalid="true" aria-describedby="demo-textarea-error-error" />
+            </FormField>
+          </div>
+        </ShowcaseSection>
+
+        <!-- ── Image upload ───────────────────────────────────────── -->
+        <ShowcaseSection id="image-upload" title="Image upload" figma="admin / hotel information / hotel logo">
+          <div class="flex flex-wrap gap-10">
+            <FormField label="Empty · pick a file for preview" for="demo-image" class="w-auto">
+              <ImageUpload id="demo-image" v-model="demoImage" />
+            </FormField>
+            <FormField label="Error" for="demo-image-error" error="Logo is required." class="w-auto">
+              <ImageUpload id="demo-image-error" :model-value="null" aria-invalid="true" />
+            </FormField>
+          </div>
+        </ShowcaseSection>
+
+        <!-- ── Toast ──────────────────────────────────────────────── -->
+        <ShowcaseSection id="toast" title="Toast" figma="shadcn-vue sonner">
+          <div class="flex gap-4">
+            <Button @click="toast.success('Saved successfully')">
+              Success toast
+            </Button>
+            <Button variant="secondary" @click="toast.error('Something went wrong')">
+              Error toast
+            </Button>
+          </div>
         </ShowcaseSection>
 
         <!-- ── Menu link ──────────────────────────────────────────── -->

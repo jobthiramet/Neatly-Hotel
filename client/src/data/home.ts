@@ -63,12 +63,6 @@ export const navLinks: NavLink[] = [
 // TODO: placeholder until the login page exists.
 export const loginHref = '#'
 
-export const aboutParagraphs = [
-  'Set in Bangkok, Thailand. Neatly Hotel offers 5-star accommodation with an outdoor pool, kids\' club, sports facilities and a fitness centre. There is also a spa, an indoor pool and saunas.',
-  'All units at the hotel are equipped with a seating area, a flat-screen TV with satellite channels, a dining area and a private bathroom with free toiletries, a bathtub and a hairdryer. Every room in Neatly Hotel features a furnished balcony. Some rooms are equipped with a coffee machine.',
-  'Free WiFi and entertainment facilities are available at property and also rentals are provided to explore the area.',
-]
-
 export const hotelPhotos: Photo[] = [
   { src: slider1, alt: 'Sunlight through window blinds casting stripes across a room' },
   { src: roomDeluxe, alt: 'Freestanding bathtub next to a bed' },

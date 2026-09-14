@@ -8,6 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -27,6 +30,19 @@ public class GlobalExceptionHandler {
 				.map(error -> error.getField() + ": " + error.getDefaultMessage())
 				.toList();
 		return build(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), details);
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ErrorResponse> handleUploadTooLarge(
+			MaxUploadSizeExceededException ex,
+			HttpServletRequest request) {
+		return build(HttpStatus.CONTENT_TOO_LARGE, "File must be 2 MB or smaller", request.getRequestURI(), List.of());
+	}
+
+	@ExceptionHandler({ MissingServletRequestPartException.class, MultipartException.class })
+	public ResponseEntity<ErrorResponse> handleBadMultipart(Exception ex, HttpServletRequest request) {
+		return build(HttpStatus.BAD_REQUEST, "Invalid multipart request", request.getRequestURI(),
+				List.of(ex.getMessage() == null ? "unknown" : ex.getMessage()));
 	}
 
 	@ExceptionHandler(Exception.class)

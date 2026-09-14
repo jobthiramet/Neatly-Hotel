@@ -13,6 +13,21 @@ const router = createRouter({
       path: '/bookings/:bookingId/change-date',
       name: 'change-booking-date',
       component: () => import('../views/ChangeBookingDateView.vue'),
+      
+    },
+    {
+      // TODO: add an admin auth guard (pending auth work).
+      path: '/admin',
+      component: () => import('../components/layout/AdminLayout.vue'),
+      redirect: { name: 'admin-hotel-information' },
+      children: [
+        {
+          path: 'hotel-information',
+          name: 'admin-hotel-information',
+          component: () => import('../views/admin/HotelInformationView.vue'),
+          meta: { title: 'Hotel Information' },
+        },
+      ],
     },
     {
       // Dev-facing component & token showcase — see client/DESIGN_SYSTEM.md

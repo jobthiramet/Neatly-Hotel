@@ -53,6 +53,7 @@ cd server
 - Health: http://localhost:8080/api/health
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Rooms API: http://localhost:8080/api/rooms
+- API reference: [docs/API.md](docs/API.md)
 
 ### 3. Server with Supabase PostgreSQL
 
