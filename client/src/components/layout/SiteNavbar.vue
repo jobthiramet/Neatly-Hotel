@@ -1,10 +1,13 @@
 <!-- Figma: nav bar / non user (12:20 desktop, 7410:3826 mobile) + hambergur menu (7431:4779) -->
 <script setup lang="ts">
+import { Show, UserButton } from '@clerk/vue'
+import { RouterLink } from 'vue-router'
+import { Button } from '@/components/ui/button'
 import { onKeyStroke } from '@vueuse/core'
 import { ref, useTemplateRef } from 'vue'
 import { IconClose, IconMenu } from '@/components/icons'
 import NeatlyLogo from '@/components/NeatlyLogo.vue'
-import { loginHref, navLinks } from '@/data/home'
+import { navLinks } from '@/data/home'
 
 const menuOpen = ref(false)
 const menuButton = useTemplateRef('menuButton')
@@ -33,9 +36,13 @@ onKeyStroke('Escape', closeMenu)
         </li>
       </ul>
 
-      <a :href="loginHref" class="hidden rounded-sm px-4 py-6 text-body2 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring lg:block">
-        Log in
-      </a>
+      <div class="hidden items-center gap-3 lg:flex">
+        <Show when="signed-out">
+          <Button as-child variant="ghost"><RouterLink to="/sign-in">Log in</RouterLink></Button>
+          <Button as-child><RouterLink to="/sign-up">Sign up</RouterLink></Button>
+        </Show>
+        <Show when="signed-in"><UserButton /></Show>
+      </div>
 
       <button
         ref="menuButton"
@@ -64,9 +71,13 @@ onKeyStroke('Escape', closeMenu)
         </li>
       </ul>
       <hr class="my-4 border-gray-300">
-      <a :href="loginHref" class="block rounded-sm px-4 py-6 text-body2 text-orange-500 outline-none is-focus:ring-2 is-focus:ring-ring" @click="closeMenu">
-        Log in
-      </a>
+      <div class="flex items-center gap-3">
+        <Show when="signed-out">
+          <Button as-child variant="ghost"><RouterLink to="/sign-in" @click="closeMenu">Log in</RouterLink></Button>
+          <Button as-child><RouterLink to="/sign-up" @click="closeMenu">Sign up</RouterLink></Button>
+        </Show>
+        <Show when="signed-in"><UserButton /></Show>
+      </div>
     </div>
   </header>
 </template>
