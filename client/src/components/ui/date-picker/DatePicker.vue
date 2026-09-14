@@ -55,12 +55,13 @@ const label = computed(() => value.value ? formatter.format(value.value.toDate(g
       </button>
     </PopoverTrigger>
     <PopoverContent>
-      <Calendar
-        v-model="value"
-        :min-value="minValue"
-        :max-value="maxValue"
-        initial-focus
-      />
+    <Calendar
+      v-model="value"
+      :min-value="minValue"
+      :max-value="maxValue"
+      :placeholder="value ?? maxValue"
+      initial-focus
+    />
     </PopoverContent>
   </Popover>
 </template>

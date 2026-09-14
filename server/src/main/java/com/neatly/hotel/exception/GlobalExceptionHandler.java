@@ -36,7 +36,7 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ErrorResponse> handleUploadTooLarge(
 			MaxUploadSizeExceededException ex,
 			HttpServletRequest request) {
-		return build(HttpStatus.CONTENT_TOO_LARGE, "File must be 2 MB or smaller", request.getRequestURI(), List.of());
+		return build(HttpStatus.CONTENT_TOO_LARGE, "File exceeds maximum upload size", request.getRequestURI(), List.of());
 	}
 
 	@ExceptionHandler({ MissingServletRequestPartException.class, MultipartException.class })

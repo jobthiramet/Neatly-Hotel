@@ -1,5 +1,6 @@
 package com.neatly.hotel.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -7,6 +8,15 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -14,21 +24,46 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
 	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+	public SecurityFilterChain securityFilterChain(
+			HttpSecurity http,
+			@Value("${clerk.issuer:}") String issuer,
+			@Value("${clerk.authorized-party:}") String authorizedParty) throws Exception {
 		http
 				.csrf(AbstractHttpConfigurer::disable)
 				.cors(Customizer.withDefaults())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
+						.requestMatchers("/api/profiles/**").authenticated()
 						.requestMatchers(
 								"/api/health",
 								"/v3/api-docs/**",
 								"/swagger-ui/**",
 								"/swagger-ui.html")
 						.permitAll()
-						// Scaffold: keep APIs open until Supabase JWT auth is wired.
 						.anyRequest().permitAll());
 
+		JwtDecoder decoder = issuer.isBlank()
+				? token -> { throw new JwtException("Clerk issuer is not configured"); }
+				: clerkJwtDecoder(issuer, authorizedParty);
+		http.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(decoder)));
+
 		return http.build();
+	}
+
+	private JwtDecoder clerkJwtDecoder(String issuer, String authorizedParty) {
+		String normalizedIssuer = issuer.replaceAll("/+$", "");
+		NimbusJwtDecoder decoder = NimbusJwtDecoder
+				.withJwkSetUri(normalizedIssuer + "/.well-known/jwks.json")
+				.build();
+		OAuth2TokenValidator<Jwt> validator = JwtValidators.createDefaultWithIssuer(normalizedIssuer);
+		if (!authorizedParty.isBlank()) {
+			OAuth2Error error = new OAuth2Error("invalid_token", "Invalid authorized party", null);
+			OAuth2TokenValidator<Jwt> authorizedPartyValidator = token -> authorizedParty.equals(token.getClaimAsString("azp"))
+					? OAuth2TokenValidatorResult.success()
+					: OAuth2TokenValidatorResult.failure(error);
+			validator = new DelegatingOAuth2TokenValidator<>(validator, authorizedPartyValidator);
+		}
+		decoder.setJwtValidator(validator);
+		return decoder;
 	}
 }
