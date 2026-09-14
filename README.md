@@ -75,3 +75,9 @@ With `npm run dev` running, the live showcase is at http://localhost:5173/design
 - `main` ? production-ready
 - `dev` ? integration / testing
 - `feat/...` ? feature work ? merge into `dev` first, then `dev` ? `main`
+
+## Contributing
+
+- Branch off `dev` and open PRs back into `dev`. Never target `main`.
+- Use [Conventional Commits](https://www.conventionalcommits.org) for commit messages and PR titles.
+- **AI coding agents** (Claude Code, Cursor, Copilot, Codex, …) must follow **[AGENTS.md](AGENTS.md)**. It holds the workflow, component-reuse rules, code conventions and git conventions for humans too.
