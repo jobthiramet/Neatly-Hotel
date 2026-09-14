@@ -10,6 +10,11 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/bookings/:bookingId/change-date',
+      name: 'change-booking-date',
+      component: () => import('../views/ChangeBookingDateView.vue'),
+    },
+    {
       // Dev-facing component & token showcase — see client/DESIGN_SYSTEM.md
       path: '/design-system',
       name: 'design-system',

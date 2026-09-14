@@ -15,6 +15,9 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   disabled?: boolean
   invalid?: boolean
+  minValue?: DateValue
+  maxValue?: DateValue
+  ariaDescribedby?: string
   class?: HTMLAttributes['class']
 }>(), {
   placeholder: 'Select date',
@@ -39,6 +42,7 @@ const label = computed(() => value.value ? formatter.format(value.value.toDate(g
         :id="id"
         :disabled="disabled"
         :aria-invalid="invalid || undefined"
+        :aria-describedby="ariaDescribedby"
         data-slot="date-picker-trigger"
         :class="cn(
           'flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm border border-input bg-white py-2.75 pr-3.75 pl-2.75 text-left text-body1 tracking-normal text-black transition-colors outline-none is-focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-600 aria-invalid:border-red data-[state=open]:border-orange-500',
@@ -51,7 +55,12 @@ const label = computed(() => value.value ? formatter.format(value.value.toDate(g
       </button>
     </PopoverTrigger>
     <PopoverContent>
-      <Calendar v-model="value" initial-focus />
+      <Calendar
+        v-model="value"
+        :min-value="minValue"
+        :max-value="maxValue"
+        initial-focus
+      />
     </PopoverContent>
   </Popover>
 </template>
