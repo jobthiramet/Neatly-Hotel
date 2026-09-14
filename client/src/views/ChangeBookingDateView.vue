@@ -5,6 +5,8 @@ import { DateFormatter, getLocalTimeZone, parseDate } from '@internationalized/d
 import { computed, ref, shallowRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import roomImage from '@/assets/home/room-superior-garden-view.webp'
+import SiteFooter from '@/components/layout/SiteFooter.vue'
+import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import {
@@ -110,8 +112,11 @@ async function confirmChange() {
 </script>
 
 <template>
-  <main class="min-h-screen bg-bg">
-    <section aria-labelledby="change-date-title" class="mx-auto max-w-280 px-4 pt-10 pb-14 lg:pt-20 lg:pb-32">
+  <div class="flex min-h-screen flex-col bg-bg">
+    <SiteNavbar />
+
+    <main class="flex-1">
+      <section aria-labelledby="change-date-title" class="mx-auto max-w-280 px-4 pt-10 pb-14 lg:pt-20 lg:pb-32">
       <h1
         id="change-date-title"
         class="max-w-142 font-serif text-h3 text-green-800 lg:text-h2 lg:text-green-700"
@@ -199,7 +204,7 @@ async function confirmChange() {
             Confirm Change Date
           </Button>
           <Button variant="ghost" as-child>
-            <RouterLink to="/">Cancel</RouterLink>
+            <RouterLink to="/booking-history">Cancel</RouterLink>
           </Button>
         </div>
 
@@ -230,5 +235,8 @@ async function confirmChange() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </main>
+    </main>
+
+    <SiteFooter />
+  </div>
 </template>
