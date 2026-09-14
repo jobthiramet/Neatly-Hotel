@@ -139,14 +139,29 @@ Format: `<type>(<scope>): <subject>`
 
 - Scopes: `client`, `server`, `db`, `design-system`, `docs`, `ci`. Omit the scope if none fits.
 - Subject: imperative mood, lowercase, no trailing period, ≤ 72 characters.
-- Body: explain *why*, wrapped at 72 characters.
+- Body: explain *why*, wrapped at 72 characters. Grouped commits list the included changes as bullets.
 - Footer: `BREAKING CHANGE: ...` (or `!` after type/scope), plus issue refs like `Closes #12`.
-- Keep commits small and focused. One logical change per commit.
+- **Group related work into as few commits as practical.**
+  - One commit per feature or per task/prompt request, not one per file, section or small step.
+  - Fold follow-ups to unpushed work (review feedback, visual, lint or copy fixes) into the existing commit with `git commit --amend`, or squash them in before pushing.
+  - Never commit work-in-progress, "fix typo" or "fix lint" commits on their own.
+- **Split into separate commits only when:** changes are unrelated features that could be reverted independently; a change touches a different part of the stack with its own scope (`client` vs `server` vs `db` migration); or the user explicitly asks.
+- **History safety:** only amend or squash commits that have **not been pushed**. Check `git log @{u}..HEAD` (or confirm there's no upstream) first. Never rewrite pushed commits on shared branches (`dev`, `main`).
+- **Grouped commit messages:** the subject summarises the whole change; the body lists the included changes as bullet points.
+- **Attribution:** no `Co-Authored-By` trailers and no mention of Claude or AI in commit messages or PR descriptions.
 
 Examples:
 
 ```text
-feat(client): add room booking form with date picker
+feat(client): build home page sections from figma
+
+- Add hero with booking search form
+- Add gallery carousel with infinite loop
+- Link footer social icons to platform homepages
+- Add placeholder testimonials
+```
+
+```text
 fix(server): return 404 when room id does not exist
 feat(db): add bookings table to schema.sql
 docs(design-system): document stepper states
