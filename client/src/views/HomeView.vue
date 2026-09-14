@@ -1,30 +1,19 @@
 <!-- Figma: home / non user (6:2 desktop, 7410:2846 mobile) -->
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
-import { computed, onMounted, ref, useTemplateRef } from 'vue'
+import { computed, ref } from 'vue'
 import heroImage from '@/assets/home/hero.webp'
 import { IconArrowRight, IconChat } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import RoomSearchForm from '@/components/RoomSearchForm.vue'
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import { aboutParagraphs, facilities, hotelPhotos, rooms, testimonials } from '@/data/home'
 
 // ── About: photo slider ────────────────────────────────────────────────────
-const slider = useTemplateRef('slider')
-
-function scrollSlider(direction: 1 | -1) {
-  const el = slider.value
-  const item = el?.firstElementChild as HTMLElement | null
-  if (!el || !item) return
-  el.scrollBy({ left: direction * item.offsetWidth, behavior: 'smooth' })
-}
-
-// Start with the middle photo centred, as in Figma.
-onMounted(() => {
-  const el = slider.value
-  const middle = el?.children[Math.floor(hotelPhotos.length / 2)] as HTMLElement | undefined
-  if (el && middle) el.scrollLeft = middle.offsetLeft - (el.clientWidth - middle.offsetWidth) / 2
-})
+// Embla's loop needs the slides to overflow the viewport; two copies of the
+// 5 photos (10 × 416px) cover screens up to ~4000px wide.
+const sliderPhotos = [...hotelPhotos, ...hotelPhotos]
 
 // ── Rooms: mosaic layout, one entry per room in `rooms` order ──────────────
 const roomLayout = [
@@ -70,35 +59,15 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
         </div>
       </div>
 
-      <div class="relative mt-10 lg:mt-33.5">
-        <ul
-          ref="slider"
-          tabindex="0"
-          aria-label="Hotel photos"
-          style="scrollbar-width: none"
-          class="flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto px-4 outline-none is-focus:ring-2 is-focus:ring-ring lg:gap-4"
-        >
-          <li v-for="photo in hotelPhotos" :key="photo.src" class="shrink-0 snap-center">
-            <img :src="photo.src" :alt="photo.alt" width="400" height="500" loading="lazy" class="h-56.25 w-45 object-cover lg:h-125 lg:w-100">
-          </li>
-        </ul>
-        <button
-          type="button"
-          aria-label="Previous photo"
-          class="absolute top-1/2 left-4 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border border-white text-white outline-none is-hover:bg-white/20 is-focus:ring-2 is-focus:ring-ring lg:left-54 lg:size-14"
-          @click="scrollSlider(-1)"
-        >
-          <IconArrowRight class="size-4 rotate-180 lg:size-6" />
-        </button>
-        <button
-          type="button"
-          aria-label="Next photo"
-          class="absolute top-1/2 right-4 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border border-white text-white outline-none is-hover:bg-white/20 is-focus:ring-2 is-focus:ring-ring lg:right-54 lg:size-14"
-          @click="scrollSlider(1)"
-        >
-          <IconArrowRight class="size-4 lg:size-6" />
-        </button>
-      </div>
+      <Carousel :opts="{ loop: true, align: 'center', startIndex: 2 }" aria-label="Hotel photos" class="mt-10 lg:mt-33.5">
+        <CarouselContent class="-ml-2 lg:-ml-4">
+          <CarouselItem v-for="(photo, index) in sliderPhotos" :key="index" class="basis-auto pl-2 lg:pl-4">
+            <img :src="photo.src" :alt="photo.alt" width="400" height="500" loading="lazy" draggable="false" class="h-56.25 w-45 object-cover lg:h-125 lg:w-100">
+          </CarouselItem>
+        </CarouselContent>
+        <CarouselPrevious aria-label="Previous image" class="lg:left-54" />
+        <CarouselNext aria-label="Next image" class="lg:right-54" />
+      </Carousel>
     </section>
 
     <!-- Service & Facilities -->
@@ -147,11 +116,11 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
         @focusout="autoSlide.resume"
       >
         <figure aria-live="polite" class="flex w-full flex-col items-center lg:order-2 lg:w-auto lg:flex-1">
-          <blockquote class="flex max-w-200 items-center text-center text-h5 text-green-700 lg:min-h-47">
+          <blockquote class="flex min-h-45 max-w-200 items-center text-center text-h5 text-green-700 lg:min-h-47">
             “{{ testimonial.quote }}”
           </blockquote>
           <figcaption class="mt-8 flex items-center gap-4 text-body1 text-gray-600">
-            <img :src="testimonial.avatar" alt="" width="32" height="32" loading="lazy" class="size-8 rounded-full object-cover">
+            <img :src="testimonial.avatar" :alt="testimonial.avatarAlt" width="32" height="32" loading="lazy" class="size-8 rounded-full object-cover">
             {{ testimonial.author }}
           </figcaption>
         </figure>

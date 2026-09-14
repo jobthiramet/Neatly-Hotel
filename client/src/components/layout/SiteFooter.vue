@@ -7,7 +7,7 @@ import { contact, socialLinks } from '@/data/home'
 const socials = [
   { label: 'Facebook', href: socialLinks.facebook, icon: IconFacebook },
   { label: 'Instagram', href: socialLinks.instagram, icon: IconInstagram },
-  { label: 'Twitter', href: socialLinks.twitter, icon: IconTwitter },
+  { label: 'X (Twitter)', href: socialLinks.twitter, icon: IconTwitter },
 ]
 </script>
 
@@ -43,7 +43,7 @@ const socials = [
       <div class="mt-8 flex items-center justify-between border-t border-green-700 pt-6 lg:mt-30">
         <ul class="flex gap-2">
           <li v-for="social in socials" :key="social.label">
-            <a :href="social.href" :aria-label="social.label" class="block rounded-sm p-1 outline-none is-hover:text-green-300 is-focus:ring-2 is-focus:ring-ring">
+            <a :href="social.href" target="_blank" rel="noopener noreferrer" :aria-label="`Neatly on ${social.label}`" class="block rounded-sm p-1 outline-none is-hover:text-green-300 is-focus:ring-2 is-focus:ring-ring">
               <component :is="social.icon" class="size-5" />
             </a>
           </li>

@@ -1,7 +1,6 @@
 // Static home page content (Figma: home, 6:2 desktop / 7410:2846 mobile).
 // Shaped like API data so these arrays can be swapped for fetched data later.
 import type { Component } from 'vue'
-import avatar from '@/assets/home/avatar.webp'
 import roomDeluxe from '@/assets/home/room-deluxe.webp'
 import roomPremierSeaView from '@/assets/home/room-premier-sea-view.webp'
 import roomSuite from '@/assets/home/room-suite.webp'
@@ -11,6 +10,9 @@ import roomSupreme from '@/assets/home/room-supreme.webp'
 import slider1 from '@/assets/home/slider-1.webp'
 import slider3 from '@/assets/home/slider-3.webp'
 import slider5 from '@/assets/home/slider-5.webp'
+import emmaLindqvist from '@/assets/images/testimonials/emma-lindqvist.webp'
+import margaretOconnor from '@/assets/images/testimonials/margaret-oconnor.webp'
+import rajeshMenon from '@/assets/images/testimonials/rajesh-menon.webp'
 import {
   IconCar,
   IconFitness,
@@ -49,6 +51,7 @@ export interface Testimonial {
   quote: string
   author: string
   avatar: string
+  avatarAlt: string
 }
 
 export const navLinks: NavLink[] = [
@@ -94,13 +97,33 @@ export const rooms: Room[] = [
   { id: 'suite', name: 'Suite', image: roomSuite, alt: 'Suite bedroom with a teal throw and large windows', href: '#' },
 ]
 
-// Placeholder copy from Figma.
-const loremQuote = 'lorem ipsum dolor sit amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint, velit official consequat duis enim velit mollit, exercitation minim amet consequat sunt.'
-
+// PLACEHOLDER CONTENT: invented reviews. Replace with real guest reviews before launch.
+// Portraits (Unsplash License), cropped to 64×64 WebP:
+// - Emma Lindqvist: https://unsplash.com/photos/fnqDH-yaFWE (Katherine Volkovski, same photo as the Figma avatar)
+// - Rajesh Menon: https://unsplash.com/photos/XGs1bSZ9P6s (Mohammed Umar Ashrafi)
+// - Margaret O'Connor: https://unsplash.com/photos/vsfbqZ1YOnU (Vidak)
 export const testimonials: Testimonial[] = [
-  { id: '1', quote: loremQuote, author: 'Katherine, Company®', avatar },
-  { id: '2', quote: loremQuote, author: 'Katherine, Company®', avatar },
-  { id: '3', quote: loremQuote, author: 'Katherine, Company®', avatar },
+  {
+    id: 'emma-lindqvist',
+    quote: 'The pool was the highlight of our stay, and the spa massage melted away a week of travel. Every corner of the hotel felt calm, and we left more rested than we arrived.',
+    author: 'Emma Lindqvist',
+    avatar: emmaLindqvist,
+    avatarAlt: 'Portrait of Emma Lindqvist',
+  },
+  {
+    id: 'rajesh-menon',
+    quote: 'The front desk team remembered my name from day one and arranged a late check-out without any fuss. The location is perfect too, a short walk from the BTS and great street food.',
+    author: 'Rajesh Menon',
+    avatar: rajeshMenon,
+    avatarAlt: 'Portrait of Rajesh Menon',
+  },
+  {
+    id: 'margaret-oconnor',
+    quote: 'Our room was spotless, and the bed was so comfortable I slept better than at home. Breakfast had a lovely mix of Thai dishes and fresh pastries, all served with a smile.',
+    author: 'Margaret O’Connor',
+    avatar: margaretOconnor,
+    avatarAlt: 'Portrait of Margaret O’Connor',
+  },
 ]
 
 export const contact = {
@@ -109,9 +132,9 @@ export const contact = {
   address: '188 Phaya Thai Rd, Thung Phaya Thai, Ratchathewi, Bangkok 10400',
 }
 
-// TODO: placeholders until the hotel's social accounts are known.
+// Platform homepages until the hotel's own social accounts are known.
 export const socialLinks = {
-  facebook: '#',
-  instagram: '#',
-  twitter: '#',
+  facebook: 'https://www.facebook.com/',
+  instagram: 'https://www.instagram.com/',
+  twitter: 'https://x.com/',
 }
