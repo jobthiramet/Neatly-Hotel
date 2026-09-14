@@ -1,30 +1,71 @@
+import { isAxiosError } from 'axios'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import neatlyLogo from '@/assets/images/neatly-logo.svg'
+import { api } from '@/api/client'
 
-export interface HotelInfo {
+/** Matches `HotelInfoResponse` in docs/API.md. */
+export interface HotelInfoResponse {
+  id: string
   name: string
   /** Paragraphs separated by blank lines. */
   description: string
-  /** Image URL, or a freshly picked file not uploaded yet. */
-  logo: string | File | null
+  logoUrl: string | null
+  updatedAt: string
 }
 
-// ponytail: in-memory only, resets on reload. Swap for API calls once the hotel endpoint exists.
-export const useHotelStore = defineStore('hotel', () => {
-  const name = ref('Neatly Hotel')
-  const description = ref([
-    'Set in Bangkok, Thailand. Neatly Hotel offers 5-star accommodation with an outdoor pool, kids\' club, sports facilities and a fitness centre. There is also a spa, an indoor pool and saunas.',
-    'All units at the hotel are equipped with a seating area, a flat-screen TV with satellite channels, a dining area and a private bathroom with free toiletries, a bathtub and a hairdryer. Every room in Neatly Hotel features a furnished balcony. Some rooms are equipped with a coffee machine.',
-    'Free WiFi and entertainment facilities are available at property and also rentals are provided to explore the area.',
-  ].join('\n\n'))
-  const logo = ref<HotelInfo['logo']>(neatlyLogo)
+interface ApiResponse<T> {
+  success: boolean
+  message: string
+  data: T
+}
 
-  function update(info: HotelInfo) {
+/** Server `ErrorResponse.message`, or a fallback. */
+export function apiErrorMessage(error: unknown, fallback: string) {
+  return (isAxiosError(error) && error.response?.data?.message) || fallback
+}
+
+export const useHotelStore = defineStore('hotel', () => {
+  const name = ref('')
+  const description = ref('')
+  const logoUrl = ref<string | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  function apply(info: HotelInfoResponse) {
     name.value = info.name
     description.value = info.description
-    logo.value = info.logo
+    logoUrl.value = info.logoUrl
   }
 
-  return { name, description, logo, update }
+  async function fetch() {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await api.get<ApiResponse<HotelInfoResponse>>('/hotel')
+      apply(data.data)
+    }
+    catch (e) {
+      error.value = apiErrorMessage(e, 'Could not load hotel information.')
+    }
+    finally {
+      loading.value = false
+    }
+  }
+
+  async function save(info: { name: string, description: string }) {
+    const { data } = await api.put<ApiResponse<HotelInfoResponse>>('/hotel', info)
+    apply(data.data)
+  }
+
+  async function uploadLogo(file: File) {
+    const body = new FormData()
+    body.append('file', file)
+    // Override the instance's JSON default so axios sends real multipart data.
+    const { data } = await api.put<ApiResponse<HotelInfoResponse>>('/hotel/logo', body, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    apply(data.data)
+  }
+
+  return { name, description, logoUrl, loading, error, fetch, save, uploadLogo }
 })

@@ -1,7 +1,7 @@
 <!-- Figma: home / non user (6:2 desktop, 7410:2846 mobile) -->
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import heroImage from '@/assets/home/hero.webp'
 import { IconArrowRight, IconChat } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
@@ -13,6 +13,7 @@ import { useHotelStore } from '@/stores/hotel'
 
 // ── About: name and description are edited in admin / hotel information ───
 const hotel = useHotelStore()
+onMounted(hotel.fetch)
 const aboutParagraphs = computed(() => hotel.description.split(/\n\s*\n/).filter(p => p.trim()))
 
 // ── About: photo slider ────────────────────────────────────────────────────
