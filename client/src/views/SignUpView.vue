@@ -4,7 +4,7 @@ import type { DateValue } from '@internationalized/date'
 import { useAuth, useSignUp, useUser } from '@clerk/vue'
 import { isClerkAPIResponseError } from '@clerk/vue/errors'
 import { parsePhoneNumberFromString } from 'libphonenumber-js'
-import { reactive, ref, shallowRef, watch } from 'vue'
+import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import IconFacebook from '@/components/icons/IconFacebook.vue'
@@ -264,15 +264,17 @@ const verificationCode = ref('')
 const verificationKind = ref<VerificationKind>()
 const error = ref('')
 const loading = ref(false)
+const requiresSocialUsername = computed(() => socialMode.value && Boolean(signUp.value?.missingFields.includes('username')))
 const fieldErrors = reactive<Record<FieldName, string>>(Object.fromEntries(fieldNames.map((field) => [field, ''])) as Record<FieldName, string>)
 const touchedFields = reactive<Record<FieldName, boolean>>(Object.fromEntries(fieldNames.map((field) => [field, false])) as Record<FieldName, boolean>)
 
-watch([isLoaded, isSignedIn, user], () => {
-  if (route.query.oauth !== '1' || !isLoaded.value || !isSignedIn.value || !user.value) return
+watch([isLoaded, isSignedIn, user, signUp], () => {
+  if (route.query.oauth !== '1' || !isLoaded.value) return
   socialMode.value = true
-  form.firstName = form.firstName || user.value.firstName || ''
-  form.lastName = form.lastName || user.value.lastName || ''
-  form.email = form.email || user.value.primaryEmailAddress?.emailAddress || ''
+  form.firstName = form.firstName || user.value?.firstName || signUp.value?.firstName || ''
+  form.lastName = form.lastName || user.value?.lastName || signUp.value?.lastName || ''
+  form.email = form.email || user.value?.primaryEmailAddress?.emailAddress || signUp.value?.emailAddress || ''
+  form.username = form.username || signUp.value?.username || ''
 }, { immediate: true })
 
 function validateField(field: FieldName) {
@@ -295,7 +297,14 @@ function touchField(field: FieldName) {
 
 function validateAllFields() {
   const fields = socialMode.value
-    ? ['firstName', 'lastName', 'phoneNumber', 'dateOfBirth', 'country'] as FieldName[]
+    ? [
+        'firstName',
+        'lastName',
+        ...(requiresSocialUsername.value ? ['username'] as FieldName[] : []),
+        'phoneNumber',
+        'dateOfBirth',
+        'country',
+      ] as FieldName[]
     : fieldNames
   fields.forEach((field) => {
     touchedFields[field] = true
@@ -417,8 +426,21 @@ async function register() {
   if (socialMode.value) {
     loading.value = true
     try {
-      await finishProfile()
-      await router.push('/')
+      if (!isSignedIn.value && signUp.value) {
+        const missingFields = signUp.value.missingFields
+        const result = await signUp.value.update({
+          ...(missingFields.includes('first_name') ? { firstName: form.firstName } : {}),
+          ...(missingFields.includes('last_name') ? { lastName: form.lastName } : {}),
+          ...(missingFields.includes('username') ? { username: form.username } : {}),
+          ...(missingFields.includes('phone_number') ? { phoneNumber: normalizePhoneNumber(form.phoneNumber) } : {}),
+        })
+        if (result.status !== 'complete') {
+          error.value = 'Please complete the remaining account information.'
+          return
+        }
+        await finishRegistration(result.createdSessionId)
+      }
+      else await finishProfile()
     }
     catch {
       error.value = 'Account created, but profile data could not be saved. Please try again.'
@@ -518,8 +540,8 @@ async function verify() {
             <div class="grid gap-x-10 gap-y-7 lg:grid-cols-2">
               <FormField label="First name" for="first-name" :error="fieldErrors.firstName"><Input id="first-name" v-model="form.firstName" :aria-invalid="!!fieldErrors.firstName" aria-describedby="first-name-error" autocomplete="given-name" placeholder="Enter your first name" required @input="validateField('firstName')" @blur="touchField('firstName')" /></FormField>
               <FormField label="Last name" for="last-name" :error="fieldErrors.lastName"><Input id="last-name" v-model="form.lastName" :aria-invalid="!!fieldErrors.lastName" aria-describedby="last-name-error" autocomplete="family-name" placeholder="Enter your last name" required @input="validateField('lastName')" @blur="touchField('lastName')" /></FormField>
+              <FormField v-if="!socialMode || requiresSocialUsername" label="Username" for="username" :error="fieldErrors.username"><Input id="username" v-model="form.username" :aria-invalid="!!fieldErrors.username" aria-describedby="username-error" autocomplete="username" placeholder="Enter your username" required @input="validateField('username')" @blur="touchField('username')" /></FormField>
               <template v-if="!socialMode">
-                <FormField label="Username" for="username" :error="fieldErrors.username"><Input id="username" v-model="form.username" :aria-invalid="!!fieldErrors.username" aria-describedby="username-error" autocomplete="username" placeholder="Enter your username" required @input="validateField('username')" @blur="touchField('username')" /></FormField>
                 <FormField label="Email" for="email" :error="fieldErrors.email"><Input id="email" v-model="form.email" :aria-invalid="!!fieldErrors.email" aria-describedby="email-error" type="email" autocomplete="email" placeholder="Enter your email" required @input="validateField('email')" @blur="touchField('email')" /></FormField>
                 <FormField label="Password" for="password" :error="fieldErrors.password"><Input id="password" v-model="form.password" :aria-invalid="!!fieldErrors.password" aria-describedby="password-error" type="password" autocomplete="new-password" placeholder="Enter your password" minlength="8" required @input="validateField('password'); validateField('confirmPassword')" @blur="touchField('password')" /></FormField>
                 <FormField label="Confirm password" for="confirm-password" :error="fieldErrors.confirmPassword"><Input id="confirm-password" v-model="form.confirmPassword" :aria-invalid="!!fieldErrors.confirmPassword" aria-describedby="confirm-password-error" type="password" autocomplete="new-password" placeholder="Confirm your password" minlength="8" required @input="validateField('confirmPassword')" @blur="touchField('confirmPassword')" /></FormField>
