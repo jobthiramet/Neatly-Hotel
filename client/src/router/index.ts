@@ -13,6 +13,7 @@ const router = createRouter({
       path: '/booking-history',
       name: 'booking-history',
       component: () => import('../views/BookingHistoryView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/bookings',
@@ -22,6 +23,7 @@ const router = createRouter({
       path: '/bookings/:bookingId/change-date',
       name: 'change-booking-date',
       component: () => import('../views/ChangeBookingDateView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/rooms/:roomId',
@@ -37,12 +39,14 @@ const router = createRouter({
       name: 'booking-refund',
       component: () => import('../views/CancelBookingView.vue'),
       props: { refund: true },
+      meta: { requiresAuth: true },
     },
     {
       path: '/bookings/:bookingId/cancel',
       name: 'booking-cancel',
       component: () => import('../views/CancelBookingView.vue'),
       props: { refund: false },
+      meta: { requiresAuth: true },
     },
     {
       // TODO: add an admin auth guard (pending auth work).
@@ -74,5 +78,27 @@ const router = createRouter({
     },
   ],
 })
+
+// Routes with `meta: { requiresAuth: true }` need a signed-in Clerk user.
+// Guests go to Clerk's sign-in, which returns them via `redirect_url`
+// (Clerk only follows same-origin redirect URLs).
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresAuth)
+    return
+  const clerk = await loadedClerk()
+  if (!clerk?.user)
+    return { path: '/sign-in', query: { redirect_url: to.fullPath } }
+})
+
+// Clerk restores the session asynchronously on page load; wait for it so a
+// signed-in user who refreshes on a protected page isn't bounced to sign-in.
+// ponytail: polls window.Clerk (set by clerkPlugin); gives up after 10s and treats the user as signed out.
+async function loadedClerk() {
+  for (let waited = 0; waited < 10_000; waited += 50) {
+    if (window.Clerk?.loaded)
+      return window.Clerk
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+}
 
 export default router
