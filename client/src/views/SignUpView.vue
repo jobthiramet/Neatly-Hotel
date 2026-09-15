@@ -358,11 +358,20 @@ async function uploadProfilePicture(token: string) {
 }
 
 async function finishRegistration(sessionId: string | null) {
-  if (!sessionId || !setActive.value) return
+  if (!sessionId || !setActive.value) {
+    throw new Error('Account was created, but no active session was returned.')
+  }
   await setActive.value({ session: sessionId })
   const token = await getToken.value()
   if (!token) throw new Error('Unable to authenticate profile creation.')
-  const profilePicturePath = await uploadProfilePicture(token)
+
+  let profilePicturePath: string | null = null
+  try {
+    profilePicturePath = await uploadProfilePicture(token)
+  } catch {
+    // Profile creation must not be lost when optional image storage fails.
+  }
+
   await api.post('/profiles', {
     firstName: firstName.value,
     lastName: lastName.value,
@@ -393,7 +402,8 @@ async function register() {
     }
     else await prepareNextVerification(result.unverifiedFields)
   } catch (caught) {
-    showError(caught)
+    if (isClerkAPIResponseError(caught)) showError(caught)
+    else error.value = 'Account created, but profile data could not be saved. Please contact support.'
   } finally {
     loading.value = false
   }
@@ -413,7 +423,8 @@ async function verify() {
       await prepareNextVerification(result.unverifiedFields)
     }
   } catch (caught) {
-    showError(caught)
+    if (isClerkAPIResponseError(caught)) showError(caught)
+    else error.value = 'Account created, but profile data could not be saved. Please contact support.'
   } finally {
     loading.value = false
   }
