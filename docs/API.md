@@ -11,10 +11,10 @@ Human-readable reference for client and server collaborators. The machine-genera
 | Swagger UI | `http://localhost:8080/swagger-ui.html` |
 | OpenAPI JSON | `http://localhost:8080/v3/api-docs` |
 
-- **`local` profile** (default): in-memory H2, seeded hotel information, no Supabase credentials. Logo upload returns `503`.
+- **`local` profile** (default): in-memory H2, seeded hotel information, no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** none yet. All endpoints are open. The `PUT /api/hotel*` endpoints will become **admin-only** once Supabase JWT auth is wired.
+**Auth:** All `/api/profiles/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -54,7 +54,9 @@ Every endpoint except `GET /api/health` wraps its payload:
 | 201 | Resource created |
 | 400 | Validation failed (`@Valid` body), invalid multipart request, invalid file type |
 | 404 | Resource not found (`ResourceNotFoundException`) |
+| 409 | Resource already exists |
 | 413 | Uploaded file too large |
+| 401 | Missing or invalid Clerk session token on a protected endpoint |
 | 500 | Unexpected error. **Currently also returned for malformed JSON and invalid UUID path params.** |
 | 502 | Upstream storage (Supabase) request failed |
 | 503 | Storage not configured |
@@ -216,9 +218,77 @@ Upload a new logo and replace the old one. The server stores it as `logo/<uuid>.
 | 400 | `Logo file is required` (empty file) |
 | 400 | `Logo must be a PNG, JPEG or WEBP image` |
 | 404 | `Hotel information not found` |
-| 413 | `File must be 2 MB or smaller` / `Logo must be 2 MB or smaller` |
+| 413 | `File exceeds maximum upload size` / `Logo must be 2 MB or smaller` |
 | 502 | `Failed to upload file to storage` |
 | 503 | `Storage is not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY` |
+
+### User profiles
+
+`ProfileResponse`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `clerkUserId` | string | Clerk user ID |
+| `firstName` | string | |
+| `lastName` | string | |
+| `phoneNumber` | string | E.164 format |
+| `dateOfBirth` | date | ISO-8601 date |
+| `country` | string | |
+| `profilePicture` | string \| null | Supabase Storage object path |
+| `role` | string | New profiles default to `user` |
+| `createdAt` | timestamp | |
+| `updatedAt` | timestamp | |
+
+#### `GET /api/profiles/me`
+
+Get the signed-in user's profile. The server reads the Clerk user ID from the verified token's `sub` claim.
+
+- Auth: Clerk session token (`Authorization: Bearer <token>`)
+- Response `200`: `ApiResponse<ProfileResponse>`
+- Errors: `404` profile not found
+
+#### `POST /api/profiles`
+
+Create a profile for the signed-in user. The server reads `clerkUserId` from the verified token's `sub` claim; it is not accepted from the request body. Text values are trimmed before saving and the role is always set to `user`.
+
+- Auth: Clerk session token (`Authorization: Bearer <token>`)
+- Body (`application/json`, `CreateProfileRequest`):
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `firstName` | string | yes | not blank; max 100 chars |
+| `lastName` | string | yes | not blank; max 100 chars |
+| `phoneNumber` | string | yes | E.164 format (`+` and 8–15 digits) |
+| `dateOfBirth` | date | yes | must be in the past and the user must be at least 18 years old |
+| `country` | string | yes | not blank; max 100 chars |
+| `profilePicture` | string | no | max 500 chars |
+
+- Response `201`: `ApiResponse<ProfileResponse>` with `message: "Profile created"`
+- Errors: `400` validation failed; `409` profile already exists
+
+#### `POST /api/profiles/picture`
+
+Upload or replace the signed-in user's profile picture. The server derives the Clerk user ID from the verified JWT, uploads with the Supabase service-role key, and returns the object path. PostgreSQL stores this path rather than image bytes or a full public URL.
+
+- Auth: Clerk session token (`Authorization: Bearer <token>`)
+- Body: `multipart/form-data`
+
+| Field | Type | Required | Rules |
+| --- | --- | --- | --- |
+| `file` | binary | yes | PNG, JPEG or WEBP; file content must match the declared type; max 5 MB |
+
+- Response `200`: `ApiResponse<string>` with `message: "Profile picture uploaded"`
+
+```json
+{
+  "success": true,
+  "message": "Profile picture uploaded",
+  "data": "users/user_abc123/avatar.png",
+  "timestamp": "2026-09-14T08:00:00Z"
+}
+```
+
+- Errors: `400` invalid or missing image; `401` missing/invalid Clerk token; `413` image too large; `502` Supabase Storage failure; `503` Storage not configured
 
 ## 4. Changelog
 
@@ -226,5 +296,8 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-14
 
+- Added authenticated `GET /api/profiles/me` and `POST /api/profiles`; profile ownership now comes from the Clerk JWT `sub` claim.
+- Added authenticated `POST /api/profiles/picture`; profile images are uploaded server-side with the Supabase service-role key and PostgreSQL stores only the object path.
+- Profile creation now requires users to be at least 18 years old.
 - Added `GET /api/hotel`, `PUT /api/hotel` and `PUT /api/hotel/logo` (hotel information and logo upload to Supabase Storage).
 - Documented existing `GET /api/health` and `/api/rooms` endpoints.

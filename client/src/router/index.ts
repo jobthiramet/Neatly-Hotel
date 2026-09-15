@@ -64,6 +64,14 @@ const router = createRouter({
       name: 'design-system',
       component: () => import('../views/DesignSystemView.vue'),
     },
+    {
+      path: "/sign-in",
+      component: () => import("@/views/SignInView.vue"),
+    },
+    {
+      path: "/sign-up",
+      component: () => import("@/views/SignUpView.vue"),
+    },
   ],
 })
 
