@@ -81,14 +81,13 @@ export const facilities: Facility[] = [
   { label: '24 hours operation', icon: IconPhoneCall },
 ]
 
-// TODO: `href` values are placeholders until the room detail page exists.
 export const rooms: Room[] = [
-  { id: 'superior-garden-view', name: 'Superior Garden View', image: roomSuperiorGardenView, alt: 'Poolside loungers with a mountain view', href: '#' },
-  { id: 'deluxe', name: 'Deluxe', image: roomDeluxe, alt: 'Deluxe room with a freestanding bathtub', href: '#' },
-  { id: 'superior', name: 'Superior', image: roomSuperior, alt: 'Superior room with a wooden feature wall', href: '#' },
-  { id: 'premier-sea-view', name: 'Premier Sea View', image: roomPremierSeaView, alt: 'Balcony chairs overlooking the sea', href: '#' },
-  { id: 'supreme', name: 'Supreme', image: roomSupreme, alt: 'Supreme room with a desk and city view', href: '#' },
-  { id: 'suite', name: 'Suite', image: roomSuite, alt: 'Suite bedroom with a teal throw and large windows', href: '#' },
+  { id: 'superior-garden-view', name: 'Superior Garden View', image: roomSuperiorGardenView, alt: 'Poolside loungers with a mountain view', href: '/rooms/superior-garden-view' },
+  { id: 'deluxe', name: 'Deluxe', image: roomDeluxe, alt: 'Deluxe room with a freestanding bathtub', href: '/rooms/deluxe' },
+  { id: 'superior', name: 'Superior', image: roomSuperior, alt: 'Superior room with a wooden feature wall', href: '/rooms/superior' },
+  { id: 'premier-sea-view', name: 'Premier Sea View', image: roomPremierSeaView, alt: 'Balcony chairs overlooking the sea', href: '/rooms/premier-sea-view' },
+  { id: 'supreme', name: 'Supreme', image: roomSupreme, alt: 'Supreme room with a desk and city view', href: '/rooms/supreme' },
+  { id: 'suite', name: 'Suite', image: roomSuite, alt: 'Suite bedroom with a teal throw and large windows', href: '/rooms/suite' },
 ]
 
 // PLACEHOLDER CONTENT: invented reviews. Replace with real guest reviews before launch.
