@@ -4,7 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import { ref, useTemplateRef } from 'vue'
 import { IconClose, IconMenu } from '@/components/icons'
 import NeatlyLogo from '@/components/NeatlyLogo.vue'
-import { loginHref, navLinks } from '@/data/home'
+import { navLinks } from '@/data/home'
 
 const menuOpen = ref(false)
 const menuButton = useTemplateRef('menuButton')
@@ -25,17 +25,34 @@ onKeyStroke('Escape', closeMenu)
         <NeatlyLogo class="h-6 lg:h-11.25" />
       </a>
 
-      <ul class="ml-12 hidden flex-1 lg:flex">
+      <ul class="ml-12 hidden flex-1 items-center gap-2 lg:flex">
         <li v-for="link in navLinks" :key="link.href">
-          <a :href="link.href" class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring">
+          <a :href="link.href.startsWith('#') ? `/${link.href}` : link.href" class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring">
             {{ link.label }}
           </a>
         </li>
+        <li>
+          <RouterLink
+            to="/booking-history"
+            class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring"
+            active-class="text-orange-500 font-semibold"
+          >
+            Booking History
+          </RouterLink>
+        </li>
       </ul>
 
-      <a :href="loginHref" class="hidden rounded-sm px-4 py-6 text-body2 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring lg:block">
-        Log in
-      </a>
+      <div class="hidden items-center gap-4 lg:flex">
+        <RouterLink
+          to="/booking-history"
+          class="flex items-center gap-2 rounded-sm text-body2 text-gray-800 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring"
+        >
+          <span class="flex size-8 items-center justify-center rounded-full bg-orange-100 font-semibold text-orange-600">
+            K
+          </span>
+          <span class="font-medium">Kate Cho</span>
+        </RouterLink>
+      </div>
 
       <button
         ref="menuButton"
@@ -58,15 +75,34 @@ onKeyStroke('Escape', closeMenu)
     >
       <ul>
         <li v-for="link in navLinks" :key="link.href">
-          <a :href="link.href" class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring" @click="closeMenu">
+          <a :href="link.href.startsWith('#') ? `/${link.href}` : link.href" class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring" @click="closeMenu">
             {{ link.label }}
           </a>
         </li>
+        <li>
+          <RouterLink
+            to="/booking-history"
+            class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring"
+            active-class="text-orange-500 font-semibold"
+            @click="closeMenu"
+          >
+            Booking History
+          </RouterLink>
+        </li>
       </ul>
       <hr class="my-4 border-gray-300">
-      <a :href="loginHref" class="block rounded-sm px-4 py-6 text-body2 text-orange-500 outline-none is-focus:ring-2 is-focus:ring-ring" @click="closeMenu">
-        Log in
-      </a>
+      <div class="px-4 py-2">
+        <RouterLink
+          to="/booking-history"
+          class="flex items-center gap-3 py-2 text-body2 text-gray-800"
+          @click="closeMenu"
+        >
+          <span class="flex size-8 items-center justify-center rounded-full bg-orange-100 font-semibold text-orange-600">
+            K
+          </span>
+          <span class="font-medium">Kate Cho</span>
+        </RouterLink>
+      </div>
     </div>
   </header>
 </template>

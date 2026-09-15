@@ -10,6 +10,15 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/booking-history',
+      name: 'booking-history',
+      component: () => import('../views/BookingHistoryView.vue'),
+    },
+    {
+      path: '/bookings',
+      redirect: { name: 'booking-history' },
+    },
+    {
       path: '/bookings/:bookingId/change-date',
       name: 'change-booking-date',
       component: () => import('../views/ChangeBookingDateView.vue'),
@@ -24,9 +33,16 @@ const router = createRouter({
       redirect: '/rooms/superior-garden-view',
     },
     {
-      path: '/bookings/:bookingId/cancel',
-      name: 'cancel-booking',
+      path: '/bookings/:bookingId/refund',
+      name: 'booking-refund',
       component: () => import('../views/CancelBookingView.vue'),
+      props: { refund: true },
+    },
+    {
+      path: '/bookings/:bookingId/cancel',
+      name: 'booking-cancel',
+      component: () => import('../views/CancelBookingView.vue'),
+      props: { refund: false },
     },
     {
       // TODO: add an admin auth guard (pending auth work).
