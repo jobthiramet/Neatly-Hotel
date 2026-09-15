@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import NeatlyLogo from '@/components/NeatlyLogo.vue'
+import IconFacebook from '@/components/icons/IconFacebook.vue'
+import IconGoogle from '@/components/icons/IconGoogle.vue'
 import { navLinks } from '@/data/home'
 import backgroundImage from '@/assets/auth/register-background.jpg'
 
@@ -14,29 +16,39 @@ const router = useRouter()
 const { isLoaded, signIn, setActive } = useSignIn()
 const identifier = ref('')
 const password = ref('')
+const resetCode = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const step = ref<'login' | 'forgot-identifier' | 'forgot-code' | 'forgot-password'>('login')
 const loading = ref(false)
-const touched = reactive({ identifier: false, password: false })
-const errors = reactive({ identifier: '', password: '', form: '' })
+const touched = reactive({ identifier: false, password: false, resetCode: false, newPassword: false, confirmPassword: false })
+const errors = reactive({ identifier: '', password: '', resetCode: '', newPassword: '', confirmPassword: '', form: '' })
 
-function validateField(field: 'identifier' | 'password') {
+type FieldName = keyof typeof touched
+
+function validateField(field: FieldName) {
   if (!touched[field]) return
-  const value = field === 'identifier' ? identifier.value.trim() : password.value
+  const values = { identifier: identifier.value.trim(), password: password.value, resetCode: resetCode.value, newPassword: newPassword.value, confirmPassword: confirmPassword.value }
+  const value = values[field]
   errors[field] = !value
-    ? `${field === 'identifier' ? 'Username or email' : 'Password'} is required.`
+    ? `${field === 'identifier' ? (step.value === 'login' ? 'Username or email' : 'Email') : field === 'resetCode' ? 'Verification code' : field === 'confirmPassword' ? 'Confirm password' : 'Password'} is required.`
     : field === 'identifier' && value.includes('@') && !/^\S+@\S+\.\S+$/.test(value)
       ? 'Please enter a valid email address.'
+      : (field === 'password' || field === 'newPassword') && value.length < 8
+        ? 'Password must be at least 8 characters.'
+        : field === 'confirmPassword' && value !== newPassword.value
+          ? 'Passwords do not match.'
       : ''
 }
 
-function touchField(field: 'identifier' | 'password') {
+function touchField(field: FieldName) {
   touched[field] = true
   validateField(field)
 }
 
-function validateAll() {
-  touchField('identifier')
-  touchField('password')
-  return Boolean(errors.identifier || errors.password)
+function validateFields(fields: FieldName[]) {
+  fields.forEach(touchField)
+  return fields.some(field => Boolean(errors[field]))
 }
 
 function showError(caught: unknown) {
@@ -53,9 +65,29 @@ function showError(caught: unknown) {
   else errors.form = message
 }
 
+function clearErrors() {
+  Object.keys(errors).forEach((field) => { errors[field as keyof typeof errors] = '' })
+}
+
+function resetTouched() {
+  Object.keys(touched).forEach((field) => { touched[field as keyof typeof touched] = false })
+}
+
+function startForgotPassword() {
+  step.value = 'forgot-identifier'
+  clearErrors()
+  resetTouched()
+}
+
+function backToLogin() {
+  step.value = 'login'
+  clearErrors()
+  resetTouched()
+}
+
 async function login() {
   errors.form = ''
-  if (validateAll() || !isLoaded.value || !signIn.value) return
+  if (validateFields(['identifier', 'password']) || !isLoaded.value || !signIn.value) return
   loading.value = true
   try {
     await signIn.value.create({ identifier: identifier.value.trim() })
@@ -65,6 +97,78 @@ async function login() {
       await router.push('/')
     }
     else errors.form = 'Additional verification is required to log in.'
+  }
+  catch (caught) {
+    showError(caught)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+async function loginWithSocial(strategy: 'oauth_google' | 'oauth_facebook') {
+  if (!isLoaded.value || !signIn.value) return
+  errors.form = ''
+  loading.value = true
+  try {
+    await signIn.value.authenticateWithRedirect({
+      strategy,
+      redirectUrl: '/sso-callback',
+      redirectUrlComplete: '/',
+    })
+  }
+  catch (caught) {
+    showError(caught)
+    loading.value = false
+  }
+}
+
+async function sendResetCode() {
+  errors.form = ''
+  if (validateFields(['identifier']) || !isLoaded.value || !signIn.value) return
+  loading.value = true
+  try {
+    await signIn.value.create({ strategy: 'reset_password_email_code', identifier: identifier.value.trim() })
+    step.value = 'forgot-code'
+    errors.form = 'A verification code has been sent to your email.'
+  }
+  catch (caught) {
+    showError(caught)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+async function verifyResetCode() {
+  errors.form = ''
+  if (validateFields(['resetCode']) || !isLoaded.value || !signIn.value) return
+  loading.value = true
+  try {
+    await signIn.value.attemptFirstFactor({ strategy: 'reset_password_email_code', code: resetCode.value })
+    step.value = 'forgot-password'
+    clearErrors()
+    resetTouched()
+  }
+  catch (caught) {
+    showError(caught)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+async function resetPassword() {
+  errors.form = ''
+  if (validateFields(['newPassword', 'confirmPassword']) || !isLoaded.value || !signIn.value) return
+  loading.value = true
+  try {
+    const result = await signIn.value.resetPassword({ password: newPassword.value })
+    if (result.status === 'complete' && setActive.value) {
+      await setActive.value({ session: result.createdSessionId })
+      await router.push('/')
+    }
+    else errors.form = 'Password reset needs an additional verification step.'
   }
   catch (caught) {
     showError(caught)
@@ -93,18 +197,76 @@ async function login() {
       <div class="hidden bg-cover bg-center lg:block" :style="{ backgroundImage: `url(${backgroundImage})` }" role="img" aria-label="Hotel pool and lounge chairs" />
       <section class="flex items-start justify-center px-6 py-24 lg:px-20 lg:pt-41">
         <div class="w-full max-w-113">
-          <h1 class="font-serif text-h2 text-green-800">Log In</h1>
-          <form class="mt-14" novalidate @submit.prevent="login">
+          <template v-if="step === 'login'">
+            <h1 class="font-serif text-h2 text-green-800">Log In</h1>
+            <div class="mt-8 grid gap-3 sm:grid-cols-2">
+              <Button type="button" variant="secondary" class="h-12 w-full gap-3" :disabled="loading || !isLoaded" @click="loginWithSocial('oauth_google')">
+                <IconGoogle class="size-5" />
+                Google
+              </Button>
+              <Button type="button" variant="secondary" class="h-12 w-full gap-3" :disabled="loading || !isLoaded" @click="loginWithSocial('oauth_facebook')">
+                <IconFacebook class="size-5" />
+                Facebook
+              </Button>
+            </div>
+            <div class="mt-8 flex items-center gap-4 text-body3 text-gray-600" aria-hidden="true">
+              <span class="h-px flex-1 bg-gray-300" />
+              <span>or continue with email</span>
+              <span class="h-px flex-1 bg-gray-300" />
+            </div>
+            <form class="mt-14" novalidate @submit.prevent="login">
             <FormField label="Username or Email" for="identifier" :error="errors.identifier">
               <Input id="identifier" v-model="identifier" autocomplete="username" placeholder="Enter your username or email" :aria-invalid="!!errors.identifier" aria-describedby="identifier-error" required @input="validateField('identifier')" @blur="touchField('identifier')" />
             </FormField>
             <FormField class="mt-10" label="Password" for="password" :error="errors.password">
               <Input id="password" v-model="password" type="password" autocomplete="current-password" placeholder="Enter your password" :aria-invalid="!!errors.password" aria-describedby="password-error" required @input="validateField('password')" @blur="touchField('password')" />
             </FormField>
+            <button type="button" class="mt-3 block text-body2 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring" @click="startForgotPassword">Forgot password?</button>
             <p v-if="errors.form" role="alert" class="mt-4 text-body2 text-red">{{ errors.form }}</p>
             <Button type="submit" class="mt-10 h-12 w-full" :disabled="loading || !isLoaded">{{ loading ? 'Logging in...' : 'Log In' }}</Button>
-          </form>
-          <p class="mt-4 text-body2 text-gray-700">Don’t have an account yet? <RouterLink to="/sign-up" class="ml-1 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring">Register</RouterLink></p>
+            </form>
+            <p class="mt-4 text-body2 text-gray-700">Don’t have an account yet? <RouterLink to="/sign-up" class="ml-1 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring">Register</RouterLink></p>
+          </template>
+
+          <template v-else-if="step === 'forgot-identifier'">
+            <h1 class="font-serif text-h2 text-green-800">Forgot Password</h1>
+            <p class="mt-6 text-body1 text-gray-700">Enter your username or email and we’ll send you a verification code.</p>
+            <form class="mt-10" novalidate @submit.prevent="sendResetCode">
+              <FormField label="Email" for="reset-email" :error="errors.identifier">
+                <Input id="reset-email" v-model="identifier" type="email" autocomplete="email" placeholder="Enter your email" :aria-invalid="!!errors.identifier" aria-describedby="identifier-error" required @input="validateField('identifier')" @blur="touchField('identifier')" />
+              </FormField>
+              <p v-if="errors.form" role="alert" class="mt-4 text-body2 text-red">{{ errors.form }}</p>
+              <Button type="submit" class="mt-10 h-12 w-full" :disabled="loading || !isLoaded">{{ loading ? 'Sending...' : 'Send code' }}</Button>
+            </form>
+            <button type="button" class="mt-4 text-body2 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring" @click="backToLogin">Back to Log In</button>
+          </template>
+
+          <template v-else-if="step === 'forgot-code'">
+            <h1 class="font-serif text-h2 text-green-800">Verify Email</h1>
+            <p class="mt-6 text-body1 text-gray-700">Enter the verification code sent to your email.</p>
+            <form class="mt-10" novalidate @submit.prevent="verifyResetCode">
+              <FormField label="Verification code" for="reset-code" :error="errors.resetCode">
+                <Input id="reset-code" v-model="resetCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter verification code" :aria-invalid="!!errors.resetCode" aria-describedby="reset-code-error" required @input="validateField('resetCode')" @blur="touchField('resetCode')" />
+              </FormField>
+              <p v-if="errors.form" role="alert" class="mt-4 text-body2 text-red">{{ errors.form }}</p>
+              <Button type="submit" class="mt-10 h-12 w-full" :disabled="loading || !isLoaded">{{ loading ? 'Verifying...' : 'Verify code' }}</Button>
+            </form>
+            <button type="button" class="mt-4 text-body2 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring" @click="backToLogin">Back to Log In</button>
+          </template>
+
+          <template v-else>
+            <h1 class="font-serif text-h2 text-green-800">Set New Password</h1>
+            <form class="mt-10" novalidate @submit.prevent="resetPassword">
+              <FormField label="New password" for="new-password" :error="errors.newPassword">
+                <Input id="new-password" v-model="newPassword" type="password" autocomplete="new-password" placeholder="Enter your new password" :aria-invalid="!!errors.newPassword" aria-describedby="new-password-error" required @input="validateField('newPassword')" @blur="touchField('newPassword')" />
+              </FormField>
+              <FormField class="mt-10" label="Confirm password" for="confirm-password" :error="errors.confirmPassword">
+                <Input id="confirm-password" v-model="confirmPassword" type="password" autocomplete="new-password" placeholder="Confirm your new password" :aria-invalid="!!errors.confirmPassword" aria-describedby="confirm-password-error" required @input="validateField('confirmPassword')" @blur="touchField('confirmPassword')" />
+              </FormField>
+              <p v-if="errors.form" role="alert" class="mt-4 text-body2 text-red">{{ errors.form }}</p>
+              <Button type="submit" class="mt-10 h-12 w-full" :disabled="loading || !isLoaded">{{ loading ? 'Saving...' : 'Set new password' }}</Button>
+            </form>
+          </template>
         </div>
       </section>
     </main>
