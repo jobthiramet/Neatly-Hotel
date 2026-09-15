@@ -10,4 +10,7 @@ public interface StorageService {
 
 	/** Deletes the object behind a public URL of this bucket. URLs from elsewhere are ignored. */
 	void deleteByPublicUrl(String publicUrl);
+
+	/** Deletes an object from a named bucket. No-op when storage is not configured. */
+	void delete(String bucket, String path);
 }

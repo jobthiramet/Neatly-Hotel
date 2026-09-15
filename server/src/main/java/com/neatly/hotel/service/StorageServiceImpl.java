@@ -77,6 +77,22 @@ public class StorageServiceImpl implements StorageService {
 		}
 	}
 
+	@Override
+	public void delete(String targetBucket, String path) {
+		if (!isConfigured()) {
+			return;
+		}
+		try {
+			restClient.delete()
+					.uri(objectUrl(targetBucket, path))
+					.header("Authorization", "Bearer " + serviceRoleKey)
+					.retrieve()
+					.toBodilessEntity();
+		} catch (RestClientException ex) {
+			throw new ApiException("Failed to delete file from storage", HttpStatus.BAD_GATEWAY);
+		}
+	}
+
 	// Paths and bucket names are server-generated, so plain concatenation is safe.
 	private String objectUrl(String targetBucket, String path) {
 		return supabaseUrl + "/storage/v1/object/" + targetBucket + "/" + path;

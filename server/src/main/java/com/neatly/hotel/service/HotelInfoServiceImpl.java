@@ -26,10 +26,7 @@ public class HotelInfoServiceImpl implements HotelInfoService {
 	private static final Logger log = LoggerFactory.getLogger(HotelInfoServiceImpl.class);
 
 	private static final long LOGO_MAX_BYTES = 2 * 1024 * 1024;
-	private static final Map<String, String> LOGO_EXTENSIONS = Map.of(
-			"image/png", "png",
-			"image/jpeg", "jpg",
-			"image/webp", "webp");
+	private static final Map<String, String> LOGO_EXTENSIONS = ImageFiles.EXTENSIONS;
 
 	private final HotelInfoRepository hotelInfoRepository;
 	private final StorageService storageService;
@@ -102,32 +99,10 @@ public class HotelInfoServiceImpl implements HotelInfoService {
 			throw new ApiException("Could not read logo file", HttpStatus.BAD_REQUEST);
 		}
 		String contentType = file.getContentType();
-		if (contentType == null || !LOGO_EXTENSIONS.containsKey(contentType) || !hasSignature(contentType, content)) {
+		if (contentType == null || !LOGO_EXTENSIONS.containsKey(contentType) || !ImageFiles.hasSignature(contentType, content)) {
 			throw new ApiException("Logo must be a PNG, JPEG or WEBP image", HttpStatus.BAD_REQUEST);
 		}
 		return content;
-	}
-
-	// The declared content type comes from the client, so also check the file's magic bytes.
-	private static boolean hasSignature(String contentType, byte[] content) {
-		return switch (contentType) {
-			case "image/png" -> bytesAt(content, 0, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
-			case "image/jpeg" -> bytesAt(content, 0, 0xFF, 0xD8, 0xFF);
-			case "image/webp" -> bytesAt(content, 0, 0x52, 0x49, 0x46, 0x46) && bytesAt(content, 8, 0x57, 0x45, 0x42, 0x50);
-			default -> false;
-		};
-	}
-
-	private static boolean bytesAt(byte[] content, int offset, int... expected) {
-		if (content.length < offset + expected.length) {
-			return false;
-		}
-		for (int i = 0; i < expected.length; i++) {
-			if ((content[offset + i] & 0xFF) != expected[i]) {
-				return false;
-			}
-		}
-		return true;
 	}
 
 	private void deleteQuietly(String url) {
