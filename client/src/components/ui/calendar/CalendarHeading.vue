@@ -7,13 +7,17 @@ import { CalendarHeading as RekaCalendarHeading, injectCalendarRootContext, useF
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<CalendarHeadingProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps<CalendarHeadingProps & {
+  /** Years offered when `minValue`/`maxValue` aren't set. Defaults to this year → +2. */
+  yearRange?: [number, number]
+  class?: HTMLAttributes['class']
+}>()
 
 defineSlots<{
   default: (props: { headingValue: string }) => VNode[]
 }>()
 
-const delegatedProps = reactiveOmit(props, 'class')
+const delegatedProps = reactiveOmit(props, 'class', 'yearRange')
 
 const forwardedProps = useForwardProps(delegatedProps)
 const calendar = injectCalendarRootContext()
@@ -43,8 +47,16 @@ const selectedYear = computed({
 
 const years = computed(() => {
   const currentYear = new Date().getFullYear()
-  const minYear = calendar.minValue.value?.year ?? 1900
-  const maxYear = calendar.maxValue.value?.year ?? currentYear + 10
+  const minValueYear = calendar.minValue.value?.year
+  const maxValueYear = calendar.maxValue.value?.year
+  // minValue/maxValue win. Otherwise `yearRange`, else this year → +2 (bookings),
+  // or 100 years back when only maxValue is set (e.g. date of birth).
+  const fromYear = props.yearRange?.[0] ?? (maxValueYear === undefined ? currentYear : maxValueYear - 100)
+  const toYear = props.yearRange?.[1] ?? currentYear + 2
+  // Always include the visible year so the select never shows a blank value.
+  const visibleYear = calendar.placeholder.value.year
+  const minYear = minValueYear ?? Math.min(fromYear, visibleYear)
+  const maxYear = maxValueYear ?? Math.max(toYear, visibleYear)
 
   return Array.from(
     { length: Math.max(0, maxYear - minYear + 1) },
