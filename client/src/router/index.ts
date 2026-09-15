@@ -72,6 +72,10 @@ const router = createRouter({
       path: "/sign-up",
       component: () => import("@/views/SignUpView.vue"),
     },
+    {
+      path: "/sso-callback",
+      component: () => import("@/views/SsoCallbackView.vue"),
+    },
   ],
 })
 
