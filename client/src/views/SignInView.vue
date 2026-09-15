@@ -16,22 +16,24 @@ const router = useRouter()
 const { isLoaded, signIn, setActive } = useSignIn()
 const identifier = ref('')
 const password = ref('')
+const secondFactorCode = ref('')
+const secondFactorStrategy = ref<'phone_code' | 'email_code' | 'totp'>()
 const resetCode = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
-const step = ref<'login' | 'forgot-identifier' | 'forgot-code' | 'forgot-password'>('login')
+const step = ref<'login' | 'second-factor' | 'forgot-identifier' | 'forgot-code' | 'forgot-password'>('login')
 const loading = ref(false)
-const touched = reactive({ identifier: false, password: false, resetCode: false, newPassword: false, confirmPassword: false })
-const errors = reactive({ identifier: '', password: '', resetCode: '', newPassword: '', confirmPassword: '', form: '' })
+const touched = reactive({ identifier: false, password: false, secondFactorCode: false, resetCode: false, newPassword: false, confirmPassword: false })
+const errors = reactive({ identifier: '', password: '', secondFactorCode: '', resetCode: '', newPassword: '', confirmPassword: '', form: '' })
 
 type FieldName = keyof typeof touched
 
 function validateField(field: FieldName) {
   if (!touched[field]) return
-  const values = { identifier: identifier.value.trim(), password: password.value, resetCode: resetCode.value, newPassword: newPassword.value, confirmPassword: confirmPassword.value }
+  const values = { identifier: identifier.value.trim(), password: password.value, secondFactorCode: secondFactorCode.value, resetCode: resetCode.value, newPassword: newPassword.value, confirmPassword: confirmPassword.value }
   const value = values[field]
   errors[field] = !value
-    ? `${field === 'identifier' ? (step.value === 'login' ? 'Username or email' : 'Email') : field === 'resetCode' ? 'Verification code' : field === 'confirmPassword' ? 'Confirm password' : 'Password'} is required.`
+    ? `${field === 'identifier' ? (step.value === 'login' ? 'Username or email' : 'Email') : field === 'resetCode' || field === 'secondFactorCode' ? 'Verification code' : field === 'confirmPassword' ? 'Confirm password' : 'Password'} is required.`
     : field === 'identifier' && value.includes('@') && !/^\S+@\S+\.\S+$/.test(value)
       ? 'Please enter a valid email address.'
       : (field === 'password' || field === 'newPassword') && value.length < 8
@@ -96,7 +98,38 @@ async function login() {
       await setActive.value({ session: result.createdSessionId })
       await router.push('/')
     }
+    else if (result.status === 'needs_second_factor' || result.status === 'needs_client_trust') {
+      const factor = result.supportedSecondFactors?.find(({ strategy }) => strategy === 'email_code' || strategy === 'phone_code' || strategy === 'totp')
+      if (!factor) {
+        errors.form = 'No supported verification method is available for this account.'
+        return
+      }
+      const strategy = factor.strategy === 'email_code' || factor.strategy === 'phone_code' ? factor.strategy : 'totp'
+      secondFactorStrategy.value = strategy
+      if (strategy === 'email_code' || strategy === 'phone_code') await signIn.value.prepareSecondFactor({ strategy })
+      step.value = 'second-factor'
+    }
     else errors.form = 'Additional verification is required to log in.'
+  }
+  catch (caught) {
+    showError(caught)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+async function verifySecondFactor() {
+  errors.form = ''
+  if (validateFields(['secondFactorCode']) || !isLoaded.value || !signIn.value || !secondFactorStrategy.value) return
+  loading.value = true
+  try {
+    const result = await signIn.value.attemptSecondFactor({ strategy: secondFactorStrategy.value, code: secondFactorCode.value })
+    if (result.status === 'complete' && setActive.value) {
+      await setActive.value({ session: result.createdSessionId })
+      await router.push('/')
+    }
+    else errors.form = 'Verification could not be completed. Please try again.'
   }
   catch (caught) {
     showError(caught)
@@ -226,6 +259,19 @@ async function resetPassword() {
             <Button type="submit" class="mt-10 h-12 w-full" :disabled="loading || !isLoaded">{{ loading ? 'Logging in...' : 'Log In' }}</Button>
             </form>
             <p class="mt-4 text-body2 text-gray-700">Don’t have an account yet? <RouterLink to="/sign-up" class="ml-1 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring">Register</RouterLink></p>
+          </template>
+
+          <template v-else-if="step === 'second-factor'">
+            <h1 class="font-serif text-h2 text-green-800">Additional Verification</h1>
+            <p class="mt-6 text-body1 text-gray-700">{{ secondFactorStrategy === 'email_code' ? 'Enter the verification code sent to your email.' : secondFactorStrategy === 'phone_code' ? 'Enter the verification code sent to your phone.' : 'Enter the code from your authenticator app.' }}</p>
+            <form class="mt-10" novalidate @submit.prevent="verifySecondFactor">
+              <FormField label="Verification code" for="second-factor-code" :error="errors.secondFactorCode">
+                <Input id="second-factor-code" v-model="secondFactorCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter verification code" :aria-invalid="!!errors.secondFactorCode" aria-describedby="second-factor-code-error" required @input="validateField('secondFactorCode')" @blur="touchField('secondFactorCode')" />
+              </FormField>
+              <p v-if="errors.form" role="alert" class="mt-4 text-body2 text-red">{{ errors.form }}</p>
+              <Button type="submit" class="mt-10 h-12 w-full" :disabled="loading || !isLoaded">{{ loading ? 'Verifying...' : 'Verify code' }}</Button>
+            </form>
+            <button type="button" class="mt-4 text-body2 text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring" @click="backToLogin">Back to Log In</button>
           </template>
 
           <template v-else-if="step === 'forgot-identifier'">
