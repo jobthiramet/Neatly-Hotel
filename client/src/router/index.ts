@@ -13,7 +13,15 @@ const router = createRouter({
       path: '/bookings/:bookingId/change-date',
       name: 'change-booking-date',
       component: () => import('../views/ChangeBookingDateView.vue'),
-      
+    },
+    {
+      path: '/rooms/:roomId',
+      name: 'room-detail',
+      component: () => import('../views/RoomDetailView.vue'),
+    },
+    {
+      path: '/room-detail',
+      redirect: '/rooms/superior-garden-view',
     },
     {
       path: '/bookings/:bookingId/cancel',
