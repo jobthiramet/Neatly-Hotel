@@ -13,6 +13,27 @@
 @custom-variant is-active (&:active:not(:disabled, [data-disabled]), &[data-force~="active"]);
 @custom-variant is-focus (&:focus-visible, &[data-force~="focus"]);
 
+/* Large screen with a mouse/trackpad. Touch tablets at lg stay out. */
+@custom-variant desktop {
+  @variant lg {
+    @media (hover: hover) and (pointer: fine) {
+      @slot;
+    }
+  }
+}
+
+/* One screen minus the navbar; later lines win where supported. */
+@utility min-h-screen-nav {
+  min-height: calc(100vh - var(--spacing-navbar));
+  min-height: calc(100svh - var(--spacing-navbar));
+  min-height: calc(100dvh - var(--spacing-navbar));
+}
+
+/* Header row sized to content, last row takes the remaining height. */
+@utility grid-rows-fill {
+  grid-template-rows: auto 1fr;
+}
+
 /* Expose shadcn-vue semantic aliases (defined in tokens.css) as utilities. */
 @theme inline {
   --color-background: var(--background);
@@ -42,6 +63,11 @@
 }
 
 @layer base {
+  /* Anchor links land below the sticky navbar. */
+  html {
+    scroll-padding-top: var(--navbar-height);
+  }
+
   * {
     @apply border-border;
   }
