@@ -2,7 +2,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { IconArrowRight, IconChat } from '@/components/icons'
+import ChatbotWidget from '@/components/chatbot/ChatbotWidget.vue'
+import { IconArrowRight } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
@@ -216,12 +217,5 @@ function handleBookNow() {
 
   <SiteFooter />
 
-  <!-- Floating Chat FAB -->
-  <button
-    type="button"
-    aria-label="Chat with Neatly"
-    class="fixed right-4 bottom-4 z-30 flex size-16 items-center justify-center rounded-full bg-white text-green-700 shadow-md outline-none is-hover:bg-green-100 is-focus:ring-2 is-focus:ring-ring lg:right-6 lg:bottom-6"
-  >
-    <IconChat class="size-8" />
-  </button>
+  <ChatbotWidget />
 </template>

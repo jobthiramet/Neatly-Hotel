@@ -3,7 +3,8 @@
 import { useIntervalFn } from '@vueuse/core'
 import { computed, onMounted, ref } from 'vue'
 import heroImage from '@/assets/home/hero.webp'
-import { IconArrowRight, IconChat } from '@/components/icons'
+import ChatbotWidget from '@/components/chatbot/ChatbotWidget.vue'
+import { IconArrowRight } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import RoomSearchForm from '@/components/RoomSearchForm.vue'
@@ -165,12 +166,5 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
 
   <SiteFooter />
 
-  <!-- Figma: FAB (13220:4990). Fixed while scrolling. TODO: open the chatbot once it exists. -->
-  <button
-    type="button"
-    aria-label="Chat with Neatly"
-    class="fixed right-4 bottom-4 z-30 flex size-16 items-center justify-center rounded-full bg-white text-green-700 shadow-md outline-none is-hover:bg-green-100 is-focus:ring-2 is-focus:ring-ring lg:right-6 lg:bottom-6"
-  >
-    <IconChat class="size-8" />
-  </button>
+  <ChatbotWidget />
 </template>
