@@ -256,6 +256,20 @@ toast.success('Hotel information updated')
 </MenuLink>
 ```
 
+### Tabs: not in Figma yet, home Services section
+
+shadcn-vue tabs on Reka UI: `tablist` / `tab` / `tabpanel` roles, `aria-selected`, `aria-controls` and arrow-key navigation built in.
+Styled for dark green surfaces: `green-300` labels, white on hover, `orange-500` underline when selected. Put the icon in the trigger slot before the label.
+
+```vue
+<Tabs default-value="spa">
+  <TabsList aria-label="Services">
+    <TabsTrigger value="spa"><IconSpa class="size-15" /> Spa</TabsTrigger>
+  </TabsList>
+  <TabsContent value="spa">…</TabsContent>
+</Tabs>
+```
+
 ### Carousel — `home / image slider` (17:53)
 
 shadcn-vue carousel on [Embla](https://www.embla-carousel.com). Pass Embla options via `opts`.
@@ -298,7 +312,8 @@ Don't use `data-force` in product code.
 2. **No arbitrary values.** `bg-[#fff]`, `p-[13px]`, `text-[18px]` and `[mask:…]` aren't allowed. CSS-variable shorthands such as `max-h-(--reka-select-content-available-height)` are fine.
 3. **Only theme classes.** Classes Tailwind doesn't know (like `text-sm`) fail the lint.
 4. **New tokens go into Figma first**, then into `tokens.css`, using the Figma name. If a designer hasn't defined it, ask before inventing one.
-5. **Icons come from Figma.** Export the SVG, replace its fills and strokes with `currentColor`, and add it to `src/components/icons`. Color icons with `text-*` utilities.
+5. **Stacking order.** Page content `z-10`–`z-20`, floating chat button `z-30`, sticky site navbar `z-40`, overlays (dialog, popover, select, date picker) `z-50`. Overlays are portalled to `<body>`, so they always sit above the navbar.
+6. **Icons come from Figma.** Export the SVG, replace its fills and strokes with `currentColor`, and add it to `src/components/icons`. Color icons with `text-*` utilities.
 
 ## 5. Adding a component
 

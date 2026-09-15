@@ -132,6 +132,13 @@
 
 /* shadcn-vue semantic aliases → Neatly palette */
 :root {
+  /* Layout: site navbar height. Used by h-navbar and the home hero cover. */
+  --navbar-height: 3rem;
+
+  @variant lg {
+    --navbar-height: 6.25rem;
+  }
+
   --background: var(--color-white);
   --foreground: var(--color-gray-900);
   --card: var(--color-white);
@@ -157,4 +164,8 @@
   --sidebar-primary-foreground: var(--color-green-100);
   --sidebar-border: var(--color-green-700);
   --radius: var(--radius-sm);
+}
+
+@theme inline {
+  --spacing-navbar: var(--navbar-height);
 }

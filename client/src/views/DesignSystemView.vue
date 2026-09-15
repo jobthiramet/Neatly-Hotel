@@ -5,7 +5,7 @@ import { getLocalTimeZone, today } from '@internationalized/date'
 import { onMounted, ref, shallowRef } from 'vue'
 import ShowcaseSection from '@/components/design-system/ShowcaseSection.vue'
 import StateLabel from '@/components/design-system/StateLabel.vue'
-import { IconArrowRight, IconBooking, IconCash } from '@/components/icons'
+import { IconArrowRight, IconBooking, IconCash, IconSauna, IconSpa, IconWifi } from '@/components/icons'
 import NeatlyLogo from '@/components/NeatlyLogo.vue'
 import { Badge, roomStatusTone } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ import { FormField } from '@/components/ui/form-field'
 import { ImageUpload } from '@/components/ui/image-upload'
 import { Input } from '@/components/ui/input'
 import { MenuLink } from '@/components/ui/menu-link'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PaymentOption } from '@/components/ui/payment-option'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -120,6 +121,7 @@ const nav = [
   ['image-upload', 'Image upload'],
   ['toast', 'Toast'],
   ['menu-link', 'Menu link'],
+  ['tabs', 'Tabs'],
   ['carousel', 'Carousel'],
   ['logo', 'Logo'],
 ] as const
@@ -571,6 +573,40 @@ const nav = [
                 <IconBooking /> Menu link
               </MenuLink>
             </div>
+          </div>
+        </ShowcaseSection>
+
+        <!-- ── Tabs ───────────────────────────────────────────────── -->
+        <ShowcaseSection id="tabs" title="Tabs" figma="not in Figma yet (home Services section)">
+          <div class="flex flex-col gap-6">
+            <div class="flex flex-wrap gap-6 rounded-sm bg-green-700 p-6">
+              <div class="flex flex-col gap-2">
+                <StateLabel class="text-white">Default</StateLabel>
+                <Tabs default-value="none"><TabsList><TabsTrigger value="spa"><IconSpa class="size-15" /> Spa</TabsTrigger></TabsList></Tabs>
+              </div>
+              <div class="flex flex-col gap-2">
+                <StateLabel class="text-white">Hover</StateLabel>
+                <Tabs default-value="none"><TabsList><TabsTrigger value="spa" data-force="hover"><IconSpa class="size-15" /> Spa</TabsTrigger></TabsList></Tabs>
+              </div>
+              <div class="flex flex-col gap-2">
+                <StateLabel class="text-white">Focus</StateLabel>
+                <Tabs default-value="none"><TabsList><TabsTrigger value="spa" data-force="focus"><IconSpa class="size-15" /> Spa</TabsTrigger></TabsList></Tabs>
+              </div>
+              <div class="flex flex-col gap-2">
+                <StateLabel class="text-white">Selected</StateLabel>
+                <Tabs default-value="spa"><TabsList><TabsTrigger value="spa"><IconSpa class="size-15" /> Spa</TabsTrigger></TabsList></Tabs>
+              </div>
+            </div>
+            <Tabs default-value="spa" class="rounded-sm bg-green-700 p-6 text-white">
+              <TabsList aria-label="Tabs demo">
+                <TabsTrigger value="spa"><IconSpa class="size-15" /> Spa</TabsTrigger>
+                <TabsTrigger value="sauna"><IconSauna class="size-15" /> Sauna</TabsTrigger>
+                <TabsTrigger value="wifi"><IconWifi class="size-15" /> Free Wifi</TabsTrigger>
+              </TabsList>
+              <TabsContent value="spa">Spa panel. Use the arrow keys to move between tabs.</TabsContent>
+              <TabsContent value="sauna">Sauna panel.</TabsContent>
+              <TabsContent value="wifi">Free Wifi panel.</TabsContent>
+            </Tabs>
           </div>
         </ShowcaseSection>
 

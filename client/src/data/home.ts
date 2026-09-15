@@ -7,6 +7,13 @@ import roomSuite from '@/assets/home/room-suite.webp'
 import roomSuperiorGardenView from '@/assets/home/room-superior-garden-view.webp'
 import roomSuperior from '@/assets/home/room-superior.webp'
 import roomSupreme from '@/assets/home/room-supreme.webp'
+import serviceFitness from '@/assets/home/services/service-fitness.webp'
+import serviceLounge from '@/assets/home/services/service-lounge.webp'
+import serviceParking from '@/assets/home/services/service-parking.webp'
+import serviceReception from '@/assets/home/services/service-reception.webp'
+import serviceSauna from '@/assets/home/services/service-sauna.webp'
+import serviceSpa from '@/assets/home/services/service-spa.webp'
+import serviceWifi from '@/assets/home/services/service-wifi.webp'
 import slider1 from '@/assets/home/slider-1.webp'
 import slider3 from '@/assets/home/slider-3.webp'
 import slider5 from '@/assets/home/slider-5.webp'
@@ -34,8 +41,12 @@ export interface Photo {
 }
 
 export interface Facility {
+  id: string
   label: string
   icon: Component
+  description: string
+  image: string
+  alt: string
 }
 
 export interface Room {
@@ -71,14 +82,65 @@ export const hotelPhotos: Photo[] = [
   { src: slider5, alt: 'Loungers beside the hotel pool' },
 ]
 
+// PLACEHOLDER CONTENT: invented descriptions. Replace with real hotel details before launch.
+// Photos supplied by the team (source URLs not recorded), cropped to 1200×800 WebP.
 export const facilities: Facility[] = [
-  { label: 'Spa', icon: IconSpa },
-  { label: 'Sauna', icon: IconSauna },
-  { label: 'Fitness', icon: IconFitness },
-  { label: 'Arrival Lounge', icon: IconLounge },
-  { label: 'Free Wifi', icon: IconWifi },
-  { label: 'Parking', icon: IconCar },
-  { label: '24 hours operation', icon: IconPhoneCall },
+  {
+    id: 'spa',
+    label: 'Spa',
+    icon: IconSpa,
+    description: 'Unwind in private treatment rooms finished in warm wood and stone. Our therapists offer signature massages, facials and body wraps using natural oils. Book a session at reception or from your room.',
+    image: serviceSpa,
+    alt: 'Spa lounge with two armchairs beside a treatment room with massage beds',
+  },
+  {
+    id: 'sauna',
+    label: 'Sauna',
+    icon: IconSauna,
+    description: 'A traditional Finnish sauna with softly lit cedar benches and a stone heater. Sessions are included with every stay, with fresh towels and chilled water waiting outside.',
+    image: serviceSauna,
+    alt: 'Wooden sauna with lit benches and a round stone heater',
+  },
+  {
+    id: 'fitness',
+    label: 'Fitness',
+    icon: IconFitness,
+    description: 'Keep up your routine in our fully equipped gym, open around the clock. Treadmills, bikes and a full rack of free weights are ready whenever you are.',
+    image: serviceFitness,
+    alt: 'Hotel gym with treadmills, a mirrored wall and a dumbbell rack',
+  },
+  {
+    id: 'arrival-lounge',
+    label: 'Arrival Lounge',
+    icon: IconLounge,
+    description: 'Arrived early or leaving late? Relax in the arrival lounge with comfortable seating, refreshments and luggage storage until your room is ready.',
+    image: serviceLounge,
+    alt: 'Sunlit hotel lounge with armchairs and a polished marble floor',
+  },
+  {
+    id: 'free-wifi',
+    label: 'Free Wifi',
+    icon: IconWifi,
+    description: 'Fast, free wifi reaches every room, the lounge and the poolside. Stream, work or video call without a password hunt: connect once and stay online for your whole visit.',
+    image: serviceWifi,
+    alt: 'Laptop on a hotel bed beside a lit bedside lamp',
+  },
+  {
+    id: 'parking',
+    label: 'Parking',
+    icon: IconCar,
+    description: 'Free on-site parking is available for every guest, shaded by mature trees. Spaces are a short walk from the entrance, and staff can help carry your luggage in.',
+    image: serviceParking,
+    alt: 'Open-air car park with parked cars under a large tree',
+  },
+  {
+    id: 'reception',
+    label: '24 hours operation',
+    icon: IconPhoneCall,
+    description: 'Our front desk is staffed day and night. Late check-in, taxi bookings or a quick recommendation: someone is always here to help.',
+    image: serviceReception,
+    alt: 'Hotel reception desk with wooden panels and leather armchairs',
+  },
 ]
 
 export const rooms: Room[] = [

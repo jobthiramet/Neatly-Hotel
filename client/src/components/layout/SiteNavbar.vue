@@ -1,13 +1,17 @@
 <!-- Figma: nav bar / non user (12:20 desktop, 7410:3826 mobile) + hambergur menu (7431:4779) -->
 <script setup lang="ts">
 import { Show, UserButton } from "@clerk/vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { onKeyStroke } from "@vueuse/core";
 import { ref, useTemplateRef } from "vue";
 import { IconClose, IconMenu } from "@/components/icons";
 import NeatlyLogo from "@/components/NeatlyLogo.vue";
 import { navLinks } from "@/data/home";
+
+const emit = defineEmits<{ scrollTop: [] }>();
+const route = useRoute();
+const router = useRouter();
 
 const menuOpen = ref(false);
 const menuButton = useTemplateRef("menuButton");
@@ -19,17 +23,31 @@ function closeMenu() {
 }
 
 onKeyStroke("Escape", closeMenu);
+
+// Already home: scroll to the top instead of navigating. Modified clicks (new tab etc.) stay native.
+function onLogoClick(event: MouseEvent) {
+  menuOpen.value = false;
+  if (route.path !== "/" || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (route.hash) router.replace({ hash: "" });
+  emit("scrollTop");
+}
 </script>
 
 <template>
-  <header class="relative z-40 bg-white">
+  <header class="sticky top-0 z-40 bg-white">
     <nav
       aria-label="Main"
-      class="mx-auto flex h-12 max-w-288 items-center justify-between px-4 lg:h-25"
+      class="mx-auto flex h-navbar max-w-288 items-center justify-between px-4"
     >
-      <a href="/" class="rounded-sm outline-none is-focus:ring-2 is-focus:ring-ring">
+      <RouterLink
+        to="/"
+        aria-label="Neatly, go to home"
+        class="rounded-sm outline-none is-focus:ring-2 is-focus:ring-ring"
+        @click="onLogoClick"
+      >
         <NeatlyLogo class="h-6 lg:h-11.25" />
-      </a>
+      </RouterLink>
 
       <ul class="ml-12 hidden flex-1 items-center gap-2 lg:flex">
         <li v-for="link in navLinks" :key="link.href">
@@ -76,7 +94,7 @@ onKeyStroke("Escape", closeMenu);
     <div
       v-show="menuOpen"
       id="mobile-menu"
-      class="fixed inset-x-0 top-12 bottom-0 overflow-y-auto border-t border-gray-300 bg-white px-4 pt-6 lg:hidden"
+      class="fixed inset-x-0 top-navbar bottom-0 overflow-y-auto border-t border-gray-300 bg-white px-4 pt-6 lg:hidden"
     >
       <ul>
         <li v-for="link in navLinks" :key="link.href">
