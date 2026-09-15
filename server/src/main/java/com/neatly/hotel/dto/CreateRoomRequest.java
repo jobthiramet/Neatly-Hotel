@@ -1,15 +1,11 @@
 package com.neatly.hotel.dto;
 
-import java.math.BigDecimal;
-
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public record CreateRoomRequest(
-		@NotBlank String name,
-		@NotBlank String type,
-		@NotNull @DecimalMin("0.0") BigDecimal pricePerNight,
-		@NotNull @Min(1) Integer capacity) {
+		@NotBlank @Size(max = 20) String roomNumber,
+		@NotBlank @Size(max = 120) String roomType,
+		@NotBlank @Size(max = 50) String bedType,
+		@NotBlank @Size(max = 50) String status) {
 }

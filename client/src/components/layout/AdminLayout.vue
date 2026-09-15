@@ -17,7 +17,7 @@ import { MenuLink } from '@/components/ui/menu-link'
 // Items without a routeName are owned by other tasks and render as inert placeholders.
 const navItems: { label: string, icon: Component, routeName?: string }[] = [
   { label: 'Customer Booking', icon: IconBooking },
-  { label: 'Room Management', icon: IconRoomManagement },
+  { label: 'Room Management', icon: IconRoomManagement, routeName: 'admin-room-management' },
   { label: 'Hotel Information', icon: IconHotel, routeName: 'admin-hotel-information' },
   { label: 'Room & Property', icon: IconCube },
   { label: 'Analytics Dashboard', icon: IconChartPie },

@@ -91,17 +91,22 @@ Liveness check. **Not wrapped** in `ApiResponse`.
 | Field | Type |
 | --- | --- |
 | `id` | UUID |
-| `name` | string |
-| `type` | string |
+| `roomNumber` | string |
+| `roomType` | string |
+| `bedType` | string |
+| `status` | string |
 | `pricePerNight` | number |
 | `capacity` | integer |
 | `active` | boolean |
 
+Allowed `status` values (must match client Badge room statuses):
+`Vacant`, `Occupied`, `Assign Clean`, `Assign Dirty`, `Vacant Clean`, `Vacant Clean Inspected`, `Vacant Clean Pick Up`, `Occupied Clean`, `Occupied Clean Inspected`, `Occupied Dirty`, `Out of Order`, `Out of Service`, `Out of Inventory`.
+
 #### `GET /api/rooms`
 
-List all rooms.
+List all rooms (sorted by `roomNumber`).
 
-- Auth: none
+- Auth: none (admin auth TODO)
 - Response `200`:
 
 ```json
@@ -109,7 +114,16 @@ List all rooms.
   "success": true,
   "message": "OK",
   "data": [
-    { "id": "3f2c1b9e-7a4d-4c8e-9b1a-2d5e6f7a8b9c", "name": "Superior Garden View", "type": "Superior", "pricePerNight": 2500.00, "capacity": 2, "active": true }
+    {
+      "id": "3f2c1b9e-7a4d-4c8e-9b1a-2d5e6f7a8b9c",
+      "roomNumber": "0001",
+      "roomType": "Superior Garden View",
+      "bedType": "Single Bed",
+      "status": "Vacant Clean",
+      "pricePerNight": 0,
+      "capacity": 2,
+      "active": true
+    }
   ],
   "timestamp": "2026-09-14T07:06:56.345Z"
 }
@@ -119,27 +133,27 @@ List all rooms.
 
 Get one room.
 
-- Auth: none
+- Auth: none (admin auth TODO)
 - Path params: `id` (UUID, required)
 - Response `200`: `ApiResponse<RoomResponse>`
 - Errors: `404` room not found; `500` if `id` is not a valid UUID
 
 #### `POST /api/rooms`
 
-Create a room. New rooms are `active: true`.
+Create a room. New rooms are `active: true`, `pricePerNight: 0`, `capacity: 2`.
 
-- Auth: none
+- Auth: none (admin auth TODO)
 - Body (`application/json`, `CreateRoomRequest`):
 
 | Field | Type | Required | Validation |
 | --- | --- | --- | --- |
-| `name` | string | yes | not blank |
-| `type` | string | yes | not blank |
-| `pricePerNight` | number | yes | ≥ 0 |
-| `capacity` | integer | yes | ≥ 1 |
+| `roomNumber` | string | yes | not blank, max 20, unique (case-insensitive) |
+| `roomType` | string | yes | not blank, max 120 |
+| `bedType` | string | yes | not blank, max 50 |
+| `status` | string | yes | not blank; must be one of the allowed statuses |
 
 - Response `201`: `ApiResponse<RoomResponse>` with `message: "Room created"`
-- Errors: `400` validation failed; `500` malformed JSON
+- Errors: `400` validation failed / invalid status; `409` duplicate room number; `500` malformed JSON
 
 ### Hotel information
 
@@ -293,6 +307,11 @@ Upload or replace the signed-in user's profile picture. The server derives the C
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
+
+### 2026-09-15
+
+- **BREAKING:** `RoomResponse` / `CreateRoomRequest` now use `roomNumber`, `roomType`, `bedType`, `status` (removed `name`, `type` from the create payload; `pricePerNight` / `capacity` are server defaults on create).
+- Added `server/src/main/resources/db/005_rooms_admin_fields.sql` and updated `schema.sql` for admin Room Management.
 
 ### 2026-09-14
 

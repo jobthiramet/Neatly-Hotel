@@ -51,6 +51,12 @@ const router = createRouter({
       redirect: { name: 'admin-hotel-information' },
       children: [
         {
+          path: 'room-management',
+          name: 'admin-room-management',
+          component: () => import('../views/admin/RoomManagementView.vue'),
+          meta: { title: 'Room Management' },
+        },
+        {
           path: 'hotel-information',
           name: 'admin-hotel-information',
           component: () => import('../views/admin/HotelInformationView.vue'),

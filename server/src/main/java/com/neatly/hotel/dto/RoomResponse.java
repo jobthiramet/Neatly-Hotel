@@ -7,8 +7,10 @@ import com.neatly.hotel.model.Room;
 
 public record RoomResponse(
 		UUID id,
-		String name,
-		String type,
+		String roomNumber,
+		String roomType,
+		String bedType,
+		String status,
 		BigDecimal pricePerNight,
 		Integer capacity,
 		Boolean active) {
@@ -16,8 +18,10 @@ public record RoomResponse(
 	public static RoomResponse from(Room room) {
 		return new RoomResponse(
 				room.getId(),
-				room.getName(),
-				room.getType(),
+				room.getRoomNumber(),
+				room.getRoomType(),
+				room.getBedType(),
+				room.getStatus(),
 				room.getPricePerNight(),
 				room.getCapacity(),
 				room.getActive());
