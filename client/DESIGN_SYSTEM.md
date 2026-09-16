@@ -239,6 +239,32 @@ Object URLs are revoked on remove, replace and unmount. File type and size check
 <ImageUpload id="logo" v-model="logo" accept="image/png,image/jpeg" :aria-invalid="!!errors.logo" aria-describedby="logo-error" />
 ```
 
+### ImageGalleryUpload — `admin / room & property / image gallery`
+
+`v-model` is an ordered array of image URLs and picked `File`s. Renders one `ImageUpload` tile per item (remove button included) plus an upload tile, hidden once `max` is reached.
+Tiles reorder by drag-and-drop or, for keyboard users, Alt + ←/→ on a focused tile. Type, size and count checks belong in the parent form; other attrs go to the upload tile's file input.
+
+```vue
+<ImageGalleryUpload id="gallery" v-model="gallery" :max="12" accept="image/png,image/jpeg,image/webp" :aria-invalid="!!errors.gallery" aria-describedby="gallery-error" />
+```
+
+### Pagination — `(admin) room & property / pagination`
+
+shadcn-vue style wrappers over Reka UI `Pagination*`: `‹ 1 … 4 5 6 … 20 ›` with the current page outlined in orange and the ends disabled. Reka computes the pages and ellipses; the parent owns `page` (1-based) and syncs it wherever it lives (e.g. the URL).
+
+```vue
+<Pagination aria-label="Pagination" :total="totalElements" :items-per-page="10" :page="page" :sibling-count="1" show-edges @update:page="goToPage">
+  <PaginationContent v-slot="{ items }">
+    <PaginationPrevious />
+    <template v-for="(item, index) in items" :key="index">
+      <PaginationItem v-if="item.type === 'page'" :value="item.value" />
+      <PaginationEllipsis v-else :index="index" />
+    </template>
+    <PaginationNext />
+  </PaginationContent>
+</Pagination>
+```
+
 ### Toast — shadcn-vue `sonner`
 
 `<Toaster />` is mounted once in `App.vue`. Call `toast` from `vue-sonner` anywhere.

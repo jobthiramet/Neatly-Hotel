@@ -21,7 +21,7 @@ const navItems: { label: string, icon: Component, routeName?: string }[] = [
   { label: 'Customer Booking', icon: IconBooking },
   { label: 'Room Management', icon: IconRoomManagement },
   { label: 'Hotel Information', icon: IconHotel, routeName: 'admin-hotel-information' },
-  { label: 'Room & Property', icon: IconCube },
+  { label: 'Room & Property', icon: IconCube, routeName: 'admin-rooms' },
   { label: 'Analytics Dashboard', icon: IconChartPie },
   { label: 'Chatbot Setup', icon: IconChatText },
 ]
@@ -62,7 +62,7 @@ async function logout() {
       <nav aria-label="Admin">
         <ul>
           <li v-for="item in navItems" :key="item.label">
-            <MenuLink v-if="item.routeName" as-child class="whitespace-nowrap" :active="route.name === item.routeName">
+            <MenuLink v-if="item.routeName" as-child class="whitespace-nowrap" :active="(route.meta.adminNav ?? route.name) === item.routeName">
               <RouterLink :to="{ name: item.routeName }">
                 <component :is="item.icon" /> {{ item.label }}
               </RouterLink>
@@ -85,9 +85,12 @@ async function logout() {
 
     <div class="flex min-w-0 flex-1 flex-col">
       <header class="flex h-20 shrink-0 items-center justify-between gap-4 border-b border-gray-300 bg-white px-6 lg:px-15">
-        <h1 class="text-h5 text-black">
-          {{ route.meta.title }}
-        </h1>
+        <!-- Pages without meta.title teleport their own heading (e.g. back link + room name) here. -->
+        <div id="admin-header-title" class="min-w-0">
+          <h1 v-if="route.meta.title" class="text-h5 text-black">
+            {{ route.meta.title }}
+          </h1>
+        </div>
         <!-- Pages teleport their header actions (e.g. an Update button) here. -->
         <div id="admin-header-actions" class="flex items-center gap-4" />
       </header>

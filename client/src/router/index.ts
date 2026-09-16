@@ -68,6 +68,25 @@ const router = createRouter({
           component: () => import('../views/admin/HotelInformationView.vue'),
           meta: { title: 'Hotel Information' },
         },
+        {
+          path: 'rooms',
+          name: 'admin-rooms',
+          component: () => import('../views/admin/RoomListView.vue'),
+          meta: { title: 'Room & Property', adminNav: 'admin-rooms' },
+        },
+        {
+          path: 'rooms/new',
+          name: 'admin-room-create',
+          component: () => import('../views/admin/RoomCreateView.vue'),
+          meta: { title: 'Create New Room', adminNav: 'admin-rooms' },
+        },
+        {
+          // No title: the page teleports a back link and the room name into the header.
+          path: 'rooms/:id',
+          name: 'admin-room-edit',
+          component: () => import('../views/admin/RoomEditView.vue'),
+          meta: { adminNav: 'admin-rooms' },
+        },
       ],
     },
     {

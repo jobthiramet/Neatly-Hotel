@@ -15,10 +15,12 @@ import { Checkbox, CheckboxLabel } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { FormField } from '@/components/ui/form-field'
+import { ImageGalleryUpload } from '@/components/ui/image-gallery-upload'
 import { ImageUpload } from '@/components/ui/image-upload'
 import { Input } from '@/components/ui/input'
 import { MenuLink } from '@/components/ui/menu-link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationNext, PaginationPrevious } from '@/components/ui/pagination'
 import { PaymentOption } from '@/components/ui/payment-option'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -103,6 +105,8 @@ const step = ref(2)
 const steps = ['Basic Information', 'Special Request', 'Payment Method']
 const agreed = ref(true)
 const demoImage = ref<string | File | null>(null)
+const demoGallery = ref<(string | File)[]>([])
+const demoPage = ref(1)
 
 const nav = [
   ['colors', 'Colors'],
@@ -119,6 +123,8 @@ const nav = [
   ['stepper', 'Stepper'],
   ['textarea', 'Textarea'],
   ['image-upload', 'Image upload'],
+  ['image-gallery-upload', 'Image gallery upload'],
+  ['pagination', 'Pagination'],
   ['toast', 'Toast'],
   ['menu-link', 'Menu link'],
   ['tabs', 'Tabs'],
@@ -538,6 +544,27 @@ const nav = [
               <ImageUpload id="demo-image-error" :model-value="null" aria-invalid="true" />
             </FormField>
           </div>
+        </ShowcaseSection>
+
+        <!-- ── Image gallery upload ───────────────────────────────── -->
+        <ShowcaseSection id="image-gallery-upload" title="Image gallery upload" figma="admin / room & property / image gallery">
+          <FormField label="Pick files, drag or Alt + ←/→ to reorder (max 6)" for="demo-gallery">
+            <ImageGalleryUpload id="demo-gallery" v-model="demoGallery" :max="6" />
+          </FormField>
+        </ShowcaseSection>
+
+        <!-- ── Pagination ─────────────────────────────────────────── -->
+        <ShowcaseSection id="pagination" title="Pagination" figma="(admin) room & property / pagination">
+          <Pagination v-model:page="demoPage" aria-label="Pagination demo" :total="200" :items-per-page="10" :sibling-count="1" show-edges>
+            <PaginationContent v-slot="{ items }">
+              <PaginationPrevious />
+              <template v-for="(item, index) in items" :key="index">
+                <PaginationItem v-if="item.type === 'page'" :value="item.value" />
+                <PaginationEllipsis v-else :index="index" />
+              </template>
+              <PaginationNext />
+            </PaginationContent>
+          </Pagination>
         </ShowcaseSection>
 
         <!-- ── Toast ──────────────────────────────────────────────── -->

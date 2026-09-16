@@ -65,6 +65,20 @@ cd server
 .\run-supabase.ps1
 ```
 
+### 4. Seeding rooms
+
+The six room types from Figma live in `server/seed/rooms.json`, with images in `server/seed/rooms/`.
+
+- **supabase:** run `db/005_rooms.sql` and `db/006_storage_room_images.sql` once, start the server with `.\run-supabase.ps1`, then in another terminal:
+
+  ```powershell
+  cd server
+  .\seed-rooms.ps1                                  # or -ApiBase http://localhost:8081/api
+  ```
+
+  It creates each room through `POST /api/rooms`, so rows, `room_images` and bucket objects match real uploads. Rooms whose name already exists are skipped, so it's safe to re-run. macOS/Linux: `pwsh ./seed-rooms.ps1`.
+- **local (H2):** nothing to run. The same six rooms (without images) are seeded on startup from `db/local_rooms_seed.sql`. Running the script there just skips them.
+
 ## Design system
 
 The client UI uses the Neatly design system (tokens + shadcn-vue components) from Figma.

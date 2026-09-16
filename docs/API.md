@@ -11,7 +11,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 | Swagger UI | `http://localhost:8080/swagger-ui.html` |
 | OpenAPI JSON | `http://localhost:8080/v3/api-docs` |
 
-- **`local` profile** (default): in-memory H2, seeded hotel information, no Supabase credentials. Storage uploads return `503`.
+- **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
 **Auth:** All `/api/profiles/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `PUT /api/hotel` and `PUT /api/hotel/logo` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
@@ -52,10 +52,11 @@ Every endpoint except `GET /api/health` wraps its payload:
 | --- | --- |
 | 200 | OK |
 | 201 | Resource created |
-| 400 | Validation failed (`@Valid` body), invalid multipart request, invalid file type |
+| 400 | Validation failed (`@Valid` body), invalid multipart request, invalid file type, malformed JSON, invalid UUID or number params |
 | 404 | Resource not found (`ResourceNotFoundException`) |
 | 409 | Resource already exists |
 | 413 | Uploaded file too large |
+| 429 | Rate limit exceeded (see `Retry-After` header) |
 | 401 | Missing or invalid Clerk session token on a protected endpoint |
 | 403 | Authenticated account has no profile or its role is not `agent` on a hotel write endpoint |
 | 500 | Unexpected error. **Currently also returned for malformed JSON and invalid UUID path params.** |
@@ -87,60 +88,160 @@ Liveness check. **Not wrapped** in `ApiResponse`.
 
 ### Rooms
 
+Admin Room & Property. Rooms are **soft deleted**: `DELETE` sets `deletedAt`, and deleted rooms are excluded from every endpoint below (`404` by id). Their rows and images are kept for booking history, and a deleted room's `name` can be reused.
+
+Write endpoints are open until admin auth is wired (`TODO(auth)`).
+
+`RoomRequest` (create `room` part and update body):
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `name` | string | yes | Room type. Not blank, ≤ 120, unique among non-deleted rooms (case-insensitive, `409`) |
+| `bedType` | enum | yes | `SINGLE`, `DOUBLE`, `KING` (double bed, king size), `TWIN` |
+| `sizeSqm` | integer | yes | 1–10000 |
+| `capacity` | integer | yes | Guests, 2–6 |
+| `pricePerNight` | number | yes | > 0, ≤ 2 decimals |
+| `promotionPrice` | number \| null | no | > 0, ≤ 2 decimals, lower than `pricePerNight` (field error `promotionPriceValid`) |
+| `description` | string | yes | Not blank, ≤ 5000 |
+| `amenities` | string[] | yes | 1–50 items, each not blank and ≤ 120. Order is display order |
+
 `RoomResponse`:
 
 | Field | Type |
 | --- | --- |
 | `id` | UUID |
 | `name` | string |
-| `type` | string |
-| `pricePerNight` | number |
+| `bedType` | enum |
+| `sizeSqm` | integer |
 | `capacity` | integer |
-| `active` | boolean |
+| `pricePerNight` | number |
+| `promotionPrice` | number \| null |
+| `description` | string |
+| `amenities` | string[] |
+| `mainImage` | `RoomImage` \| null |
+| `gallery` | `RoomImage[]` (display order) |
+| `createdAt`, `updatedAt` | timestamp |
+
+`RoomImage`: `{ "id": UUID, "url": string }` (public Supabase Storage URL).
+
+`RoomSummaryResponse` (list row): `id`, `name`, `mainImageUrl` (string \| null), `pricePerNight`, `promotionPrice`, `capacity`, `bedType`, `sizeSqm`.
+
+`PageResponse<T>`: `content` (T[]), `page` (zero-based), `size`, `totalElements`, `totalPages`.
+
+**Image rules:** PNG, JPEG or WEBP only (checked by content type and magic bytes; no SVG), max 5 MB each, one main image plus 4–12 gallery images per room. Objects are stored in the public `room-images` bucket at `rooms/<roomId>/<uuid>.<ext>`; the client filename is never used. Removed or replaced images are deleted from storage after the database update (failures are logged, not returned).
 
 #### `GET /api/rooms`
 
-List all rooms.
+List non-deleted rooms, newest first.
 
 - Auth: none
+- Query params:
+
+| Param | Default | Notes |
+| --- | --- | --- |
+| `search` | `""` | Case-insensitive substring of room type (`name`) or bed type |
+| `page` | `0` | Zero-based; negative is treated as `0` |
+| `size` | `10` | Clamped to 1–50 |
+
 - Response `200`:
 
 ```json
 {
   "success": true,
   "message": "OK",
-  "data": [
-    { "id": "3f2c1b9e-7a4d-4c8e-9b1a-2d5e6f7a8b9c", "name": "Superior Garden View", "type": "Superior", "pricePerNight": 2500.00, "capacity": 2, "active": true }
-  ],
-  "timestamp": "2026-09-14T07:06:56.345Z"
+  "data": {
+    "content": [
+      { "id": "3f2c1b9e-7a4d-4c8e-9b1a-2d5e6f7a8b9c", "name": "Superior Garden View", "mainImageUrl": "https://<project>.supabase.co/storage/v1/object/public/room-images/rooms/3f2c.../a1b2....jpg", "pricePerNight": 3000.00, "promotionPrice": 2500.00, "capacity": 2, "bedType": "DOUBLE", "sizeSqm": 32 }
+    ],
+    "page": 0,
+    "size": 10,
+    "totalElements": 12,
+    "totalPages": 2
+  },
+  "timestamp": "2026-09-15T07:06:56.345Z"
+}
+```
+
+- A `page` past the last page returns `200` with empty `content` (metadata still describes the full result).
+- Rate limit: **60 requests per minute per client IP** (fixed window; `app.rate-limit.*` properties). In-memory per server instance; the client IP is the socket address (`X-Forwarded-For` is not trusted).
+- Errors: `400` non-numeric `page`/`size`; `429` rate limit exceeded, with a `Retry-After` header (seconds) and the standard `ErrorResponse` body:
+
+```json
+{
+  "timestamp": "2026-09-16T07:06:21.222Z",
+  "status": 429,
+  "error": "Too Many Requests",
+  "message": "Too many requests, please try again later",
+  "path": "/api/rooms",
+  "details": []
 }
 ```
 
 #### `GET /api/rooms/{id}`
 
-Get one room.
-
 - Auth: none
-- Path params: `id` (UUID, required)
 - Response `200`: `ApiResponse<RoomResponse>`
-- Errors: `404` room not found; `500` if `id` is not a valid UUID
+- Errors: `400` invalid UUID; `404` room not found or deleted
 
 #### `POST /api/rooms`
 
-Create a room. New rooms are `active: true`.
+Create a room with its images in one request. If any upload or the database write fails, nothing is saved and already-uploaded objects are deleted.
 
-- Auth: none
-- Body (`application/json`, `CreateRoomRequest`):
+- Auth: none (TODO admin)
+- Body (`multipart/form-data`):
 
-| Field | Type | Required | Validation |
-| --- | --- | --- | --- |
-| `name` | string | yes | not blank |
-| `type` | string | yes | not blank |
-| `pricePerNight` | number | yes | ≥ 0 |
-| `capacity` | integer | yes | ≥ 1 |
+| Part | Type | Required |
+| --- | --- | --- |
+| `room` | `application/json` `RoomRequest` | yes |
+| `mainImage` | file | yes |
+| `gallery` | file, repeated 4–12 times | yes |
 
 - Response `201`: `ApiResponse<RoomResponse>` with `message: "Room created"`
-- Errors: `400` validation failed; `500` malformed JSON
+- Errors: `400` validation failed / invalid image / wrong gallery count / malformed JSON; `409` room type already exists; `413` image too large; `502` storage failure; `503` storage not configured (always on the `local` profile)
+
+#### `PUT /api/rooms/{id}`
+
+Update room fields (images have their own endpoints).
+
+- Auth: none (TODO admin)
+- Body (`application/json`): `RoomRequest`
+- Response `200`: `ApiResponse<RoomResponse>` with `message: "Room updated"`
+- Errors: `400` validation failed; `404`; `409` room type already exists
+
+#### `DELETE /api/rooms/{id}`
+
+Soft delete. Images stay in storage.
+
+- Auth: none (TODO admin)
+- Response `200`: `ApiResponse<null>` with `message: "Room deleted"`
+- Errors: `404` room not found or already deleted
+
+#### `POST /api/rooms/{id}/images`
+
+Upload one image.
+
+- Auth: none (TODO admin)
+- Query params: `main` (boolean, default `false`). `true` replaces the main image and deletes the old object; `false` appends to the gallery.
+- Body (`multipart/form-data`): `file`
+- Response `200`: `ApiResponse<RoomResponse>` with `message: "Room image uploaded"`
+- Errors: `400` invalid image or gallery already has 12; `404`; `413`; `502`; `503`
+
+#### `DELETE /api/rooms/{id}/images/{imageId}`
+
+Remove a gallery image and its storage object.
+
+- Auth: none (TODO admin)
+- Response `200`: `ApiResponse<RoomResponse>` with `message: "Room image removed"`
+- Errors: `400` image is the main image (upload a replacement instead) or fewer than 4 gallery images would remain; `404` room or image not found
+
+#### `PUT /api/rooms/{id}/images/order`
+
+Reorder the gallery.
+
+- Auth: none (TODO admin)
+- Body (`application/json`): `{ "imageIds": [UUID, ...] }`, every gallery image id exactly once, in the new order
+- Response `200`: `ApiResponse<RoomResponse>` with `message: "Room images reordered"`
+- Errors: `400` ids don't match the gallery; `404`
 
 ### Hotel information
 
@@ -197,7 +298,11 @@ Update name and description. Values are trimmed before saving.
 ```
 
 - Response `200`: `ApiResponse<HotelInfoResponse>` with `message: "Hotel information updated"`
+<<<<<<< HEAD
 - Errors: `401` missing/invalid Clerk token; `403` missing profile or non-agent role; `400` validation failed; `404` row missing; `500` malformed JSON
+=======
+- Errors: `400` validation failed; `404` row missing; `400` malformed JSON
+>>>>>>> 07d44cc (feat(server)!: add paginated room crud with soft delete and images)
 
 #### `PUT /api/hotel/logo`
 
@@ -299,8 +404,21 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-16
 
+<<<<<<< HEAD
 - **BREAKING:** `PUT /api/hotel` and `PUT /api/hotel/logo` now require a verified Clerk session token and an `agent` database profile. Guests receive `401`; missing profiles and non-agent accounts receive `403`. Public hotel reads remain available.
 - Admin client now sends the Clerk session token when saving hotel information and uploading a logo.
+=======
+- `GET /api/rooms` is rate limited to 60 requests per minute per client IP and returns `429` with `Retry-After` when exceeded.
+- Documented the default page size (10) and that an out-of-range `page` returns an empty page.
+
+### 2026-09-15
+
+- **BREAKING:** `GET /api/rooms` now returns `PageResponse<RoomSummaryResponse>` (with `search`, `page`, `size`) instead of a `RoomResponse[]`, and excludes soft-deleted rooms.
+- **BREAKING:** `POST /api/rooms` is now `multipart/form-data` (`room` JSON + `mainImage` + 4–12 `gallery` files). `CreateRoomRequest` is replaced by `RoomRequest`.
+- **BREAKING:** `RoomResponse` drops `type` and `active`; adds `bedType`, `sizeSqm`, `promotionPrice`, `description`, `amenities`, `mainImage`, `gallery`, `createdAt`, `updatedAt`. `pricePerNight` must now be > 0.
+- Added `PUT /api/rooms/{id}`, soft `DELETE /api/rooms/{id}`, `POST /api/rooms/{id}/images`, `DELETE /api/rooms/{id}/images/{imageId}` and `PUT /api/rooms/{id}/images/order`.
+- Malformed JSON bodies and invalid UUID/number params now return `400` instead of `500` (all endpoints).
+>>>>>>> 07d44cc (feat(server)!: add paginated room crud with soft delete and images)
 
 ### 2026-09-14
 
