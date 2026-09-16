@@ -3,6 +3,7 @@ import { getLocalTimeZone, today } from '@internationalized/date'
 import type { DateValue } from '@internationalized/date'
 import { useAuth, useSignUp, useUser } from '@clerk/vue'
 import { isClerkAPIResponseError } from '@clerk/vue/errors'
+import { isAxiosError } from 'axios'
 import { parsePhoneNumberFromString } from 'libphonenumber-js'
 import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -222,6 +223,7 @@ const { getToken, isSignedIn } = useAuth()
 const { isLoaded, signUp, setActive } = useSignUp()
 const { user } = useUser()
 const socialMode = ref(false)
+const completedSessionId = ref<string | null>(null)
 
 type FieldName = 'firstName' | 'lastName' | 'username' | 'email' | 'password' | 'confirmPassword' | 'phoneNumber' | 'dateOfBirth' | 'country'
 interface FormValues {
@@ -373,8 +375,25 @@ async function finishRegistration(sessionId: string | null) {
   if (!sessionId || !setActive.value) {
     throw new Error('Account was created, but no active session was returned.')
   }
+  completedSessionId.value = sessionId
   await setActive.value({ session: sessionId })
   await finishProfile()
+}
+
+function showRegistrationError(caught: unknown) {
+  if (isClerkAPIResponseError(caught)) {
+    showError(caught)
+    return
+  }
+  if (isAxiosError(caught)) {
+    const status = caught.response?.status
+    if (!caught.response) error.value = 'Unable to reach the profile service. Please try again.'
+    else if (status === 401 || status === 403) error.value = 'Your session could not be authenticated. Please sign in and try again.'
+    else if (status === 400) error.value = 'Profile information was rejected. Please check your registration details.'
+    else error.value = 'Profile data could not be saved. Please try again.'
+    return
+  }
+  error.value = 'Registration could not be completed. Please try again.'
 }
 
 async function finishProfile() {
@@ -442,8 +461,8 @@ async function register() {
       }
       else await finishProfile()
     }
-    catch {
-      error.value = 'Account created, but profile data could not be saved. Please try again.'
+    catch (caught) {
+      showRegistrationError(caught)
     }
     finally {
       loading.value = false
@@ -464,18 +483,24 @@ async function register() {
     }
     else await prepareNextVerification(result.unverifiedFields)
   } catch (caught) {
-    if (isClerkAPIResponseError(caught)) showError(caught)
-    else error.value = 'Account created, but profile data could not be saved. Please contact support.'
+    showRegistrationError(caught)
   } finally {
     loading.value = false
   }
 }
 
 async function verify() {
-  if (!signUp.value || !verificationKind.value) return
+  if ((!signUp.value && !completedSessionId.value) || !verificationKind.value) return
   error.value = ''
   loading.value = true
   try {
+    // Email verification has already succeeded when only profile saving failed.
+    if (completedSessionId.value) {
+      if (isSignedIn.value) await finishProfile()
+      else await finishRegistration(completedSessionId.value)
+      return
+    }
+    if (!signUp.value) return
     const result = await signUp.value.attemptEmailAddressVerification({ code: verificationCode.value })
     if (result.status === 'complete') {
       await finishRegistration(result.createdSessionId)
@@ -485,8 +510,7 @@ async function verify() {
       await prepareNextVerification(result.unverifiedFields)
     }
   } catch (caught) {
-    if (isClerkAPIResponseError(caught)) showError(caught)
-    else error.value = 'Account created, but profile data could not be saved. Please contact support.'
+    showRegistrationError(caught)
   } finally {
     loading.value = false
   }

@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information, no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `PUT /api/hotel` and `PUT /api/hotel/logo` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -57,11 +57,12 @@ Every endpoint except `GET /api/health` wraps its payload:
 | 409 | Resource already exists |
 | 413 | Uploaded file too large |
 | 401 | Missing or invalid Clerk session token on a protected endpoint |
+| 403 | Authenticated account has no profile or its role is not `agent` on a hotel write endpoint |
 | 500 | Unexpected error. **Currently also returned for malformed JSON and invalid UUID path params.** |
 | 502 | Upstream storage (Supabase) request failed |
 | 503 | Storage not configured |
 
-Swagger UI only lists the success code per endpoint; the error codes below come from the handler and services.
+Swagger UI documents authentication errors on hotel write endpoints; other error codes below come from the handler and services. Security-filter `401` and `403` responses do not use the `ErrorResponse` envelope.
 
 ### Formats
 
@@ -183,7 +184,7 @@ Get hotel information.
 
 Update name and description. Values are trimmed before saving.
 
-- Auth: none yet → **admin-only** later
+- Auth: Clerk session token and database profile with role `agent`
 - Body (`application/json`, `UpdateHotelInfoRequest`):
 
 | Field | Type | Required | Validation |
@@ -196,13 +197,13 @@ Update name and description. Values are trimmed before saving.
 ```
 
 - Response `200`: `ApiResponse<HotelInfoResponse>` with `message: "Hotel information updated"`
-- Errors: `400` validation failed; `404` row missing; `500` malformed JSON
+- Errors: `401` missing/invalid Clerk token; `403` missing profile or non-agent role; `400` validation failed; `404` row missing; `500` malformed JSON
 
 #### `PUT /api/hotel/logo`
 
 Upload a new logo and replace the old one. The server stores it as `logo/<uuid>.<ext>` in the public `hotel-assets` bucket (the client filename is ignored), saves the new URL, then deletes the previous object. If the upload fails, nothing changes.
 
-- Auth: none yet → **admin-only** later
+- Auth: Clerk session token and database profile with role `agent`
 - Body: `multipart/form-data`
 
 | Field | Type | Required | Rules |
@@ -214,6 +215,8 @@ Upload a new logo and replace the old one. The server stores it as `logo/<uuid>.
 
 | Code | `message` |
 | --- | --- |
+| 401 | Missing or invalid Clerk token (security-filter response) |
+| 403 | Missing profile or non-agent role (security-filter response) |
 | 400 | `Invalid multipart request` (missing `file` part or not multipart) |
 | 400 | `Logo file is required` (empty file) |
 | 400 | `Logo must be a PNG, JPEG or WEBP image` |
@@ -293,6 +296,11 @@ Upload or replace the signed-in user's profile picture. The server derives the C
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
+
+### 2026-09-16
+
+- **BREAKING:** `PUT /api/hotel` and `PUT /api/hotel/logo` now require a verified Clerk session token and an `agent` database profile. Guests receive `401`; missing profiles and non-agent accounts receive `403`. Public hotel reads remain available.
+- Admin client now sends the Clerk session token when saving hotel information and uploading a logo.
 
 ### 2026-09-14
 
