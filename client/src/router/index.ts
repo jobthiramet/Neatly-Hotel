@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import { hasAgentRole } from '@/api/agent'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -56,8 +57,8 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      // TODO: add an admin auth guard (pending auth work).
       path: '/admin',
+      meta: { requiresAgent: true },
       component: () => import('../components/layout/AdminLayout.vue'),
       redirect: { name: 'admin-hotel-information' },
       children: [
@@ -68,6 +69,22 @@ const router = createRouter({
           meta: { title: 'Hotel Information' },
         },
       ],
+    },
+    {
+      path: '/admin/login',
+      name: 'agent-login',
+      component: () => import('@/views/admin/AgentSignInView.vue'),
+      meta: { agentLogin: true },
+    },
+    {
+      path: '/admin/forbidden',
+      name: 'agent-forbidden',
+      component: () => import('@/views/admin/AgentSignInView.vue'),
+      props: { forbidden: true },
+    },
+    {
+      path: '/admin/:pathMatch(.*)*',
+      redirect: '/admin',
     },
     {
       // Dev-facing component & token showcase — see client/DESIGN_SYSTEM.md
@@ -94,6 +111,20 @@ const router = createRouter({
 // Guests go to Clerk's sign-in, which returns them via `redirect_url`
 // (Clerk only follows same-origin redirect URLs).
 router.beforeEach(async (to) => {
+  if (to.meta.requiresAgent || to.meta.agentLogin) {
+    const clerk = await loadedClerk()
+    if (!clerk?.user) return to.meta.agentLogin ? undefined : { name: 'agent-login' }
+    try {
+      const token = await clerk.session?.getToken()
+      if (!token || !await hasAgentRole(token)) return { name: 'agent-forbidden' }
+      if (to.meta.agentLogin) return { name: 'admin-hotel-information' }
+    }
+    catch {
+      // Fail closed: missing profiles and unavailable role checks never grant access.
+      return { name: 'agent-forbidden' }
+    }
+    return
+  }
   if (!to.meta.requiresAuth)
     return
   const clerk = await loadedClerk()

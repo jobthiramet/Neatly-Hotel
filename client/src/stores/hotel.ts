@@ -53,19 +53,27 @@ export const useHotelStore = defineStore('hotel', () => {
   }
 
   async function save(info: { name: string, description: string }) {
-    const { data } = await api.put<ApiResponse<HotelInfoResponse>>('/hotel', info)
+    const headers = await agentHeaders()
+    const { data } = await api.put<ApiResponse<HotelInfoResponse>>('/hotel', info, { headers })
     apply(data.data)
   }
 
   async function uploadLogo(file: File) {
+    const headers = await agentHeaders()
     const body = new FormData()
     body.append('file', file)
     // Override the instance's JSON default so axios sends real multipart data.
     const { data } = await api.put<ApiResponse<HotelInfoResponse>>('/hotel/logo', body, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { ...headers, 'Content-Type': 'multipart/form-data' },
     })
     apply(data.data)
   }
 
   return { name, description, logoUrl, loading, error, fetch, save, uploadLogo }
 })
+
+async function agentHeaders() {
+  const token = await window.Clerk?.session?.getToken()
+  if (!token) throw new Error('Please log in as an agent before updating hotel information.')
+  return { Authorization: `Bearer ${token}` }
+}

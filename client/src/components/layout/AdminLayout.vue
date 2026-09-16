@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { Component } from 'vue'
+import { useClerk } from '@clerk/vue'
+import { ref, type Component } from 'vue'
+import { toast } from 'vue-sonner'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   IconBooking,
@@ -28,6 +30,22 @@ const navItems: { label: string, icon: Component, routeName?: string }[] = [
 const placeholderClass = 'flex w-60 whitespace-nowrap cursor-default items-center gap-4 p-6 text-body1 font-medium text-green-300 [&_svg]:size-6 [&_svg]:shrink-0 [&_svg]:text-green-500'
 
 const route = useRoute()
+const clerk = useClerk()
+const loggingOut = ref(false)
+
+async function logout() {
+  if (loggingOut.value || !clerk.value) return
+  loggingOut.value = true
+  try {
+    await clerk.value.signOut({ redirectUrl: '/admin/login' })
+  }
+  catch {
+    toast.error('Unable to log out. Please try again.')
+  }
+  finally {
+    loggingOut.value = false
+  }
+}
 </script>
 
 <!-- Figma: (admin) hotel information — sidebar + header shell shared by admin pages. -->
@@ -56,11 +74,12 @@ const route = useRoute()
         </ul>
       </nav>
 
-      <!-- Placeholder: log out isn't wired to auth yet. -->
       <div class="mt-auto border-t border-green-700 py-4">
-        <div aria-disabled="true" :class="placeholderClass">
-          <IconLogout /> Log Out
-        </div>
+        <MenuLink as-child>
+          <button type="button" :disabled="loggingOut || !clerk" :aria-busy="loggingOut" @click="logout">
+            <IconLogout /> {{ loggingOut ? 'Logging out...' : 'Log Out' }}
+          </button>
+        </MenuLink>
       </div>
     </aside>
 
