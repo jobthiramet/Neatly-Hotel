@@ -13,12 +13,12 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "room_images")
-public class RoomImage extends BaseEntity {
+@Table(name = "room_type_images")
+public class RoomTypeImage extends BaseEntity {
 
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "room_id", nullable = false)
-	private Room room;
+	@JoinColumn(name = "room_type_id", nullable = false)
+	private RoomType roomType;
 
 	@Column(nullable = false, columnDefinition = "text")
 	private String url;

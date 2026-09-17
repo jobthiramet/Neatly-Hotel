@@ -24,7 +24,7 @@ import com.neatly.hotel.dto.ReorderRoomImagesRequest;
 import com.neatly.hotel.dto.RoomRequest;
 import com.neatly.hotel.dto.RoomResponse;
 import com.neatly.hotel.dto.RoomSummaryResponse;
-import com.neatly.hotel.service.RoomService;
+import com.neatly.hotel.service.RoomTypeService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,9 +35,9 @@ import jakarta.validation.Valid;
 @Tag(name = "Rooms")
 public class RoomController {
 
-	private final RoomService roomService;
+	private final RoomTypeService roomService;
 
-	public RoomController(RoomService roomService) {
+	public RoomController(RoomTypeService roomService) {
 		this.roomService = roomService;
 	}
 

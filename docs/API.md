@@ -103,7 +103,7 @@ Write endpoints are open until admin auth is wired (`TODO(auth)`).
 | `pricePerNight` | number | yes | > 0, ≤ 2 decimals |
 | `promotionPrice` | number \| null | no | > 0, ≤ 2 decimals, lower than `pricePerNight` (field error `promotionPriceValid`) |
 | `description` | string | yes | Not blank, ≤ 5000 |
-| `amenities` | string[] | yes | 1–50 items, each not blank and ≤ 120. Order is display order |
+| `amenities` | string[] | yes | 1–50 items, each not blank and ≤ 120. Order is display order. Trimmed; case-insensitive duplicates are dropped |
 
 `RoomResponse`:
 
@@ -401,6 +401,10 @@ Upload or replace the signed-in user's profile picture. The server derives the C
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
+
+### 2026-09-17
+
+- Room amenities are now stored in a shared `amenities` table. Request and response shapes are unchanged; `amenities` in `RoomRequest` is trimmed and case-insensitive duplicates are dropped (first spelling kept), and an existing amenity name is reused with its stored spelling.
 
 ### 2026-09-16
 
