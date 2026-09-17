@@ -2,8 +2,9 @@
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date'
 import { DateFormatter, getLocalTimeZone } from '@internationalized/date'
-import { computed, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { useAuth } from '@clerk/vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { IconCaretDown, IconChevronRight } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
@@ -21,6 +22,8 @@ import type { UserBooking } from '@/data/booking'
 import { useBookingStore } from '@/stores/booking'
 
 const router = useRouter()
+const route = useRoute()
+const { getToken, isLoaded } = useAuth()
 const bookingStore = useBookingStore()
 
 const formatter = new DateFormatter('en-GB', {
@@ -47,12 +50,7 @@ function formatMoney(amount: number) {
   return amount < 0 ? `-${formatted}` : formatted
 }
 
-// Track accordion expanded states
-const expandedBookingIds = ref<Record<string, boolean>>(
-  Object.fromEntries(
-    bookingStore.bookings.map(b => [b.id, !!b.expandedInitially]),
-  ),
-)
+const expandedBookingIds = ref<Record<string, boolean>>({})
 
 function toggleAccordion(id: string) {
   expandedBookingIds.value[id] = !expandedBookingIds.value[id]
@@ -103,6 +101,33 @@ function nextPage() {
     currentPage.value++
   }
 }
+
+async function focusBooking() {
+  const id = typeof route.query.bookingId === 'string' ? route.query.bookingId : ''
+  if (!id)
+    return
+  const index = bookingStore.bookings.findIndex(booking => booking.id === id)
+  if (index < 0)
+    return
+  currentPage.value = Math.floor(index / itemsPerPage.value) + 1
+  expandedBookingIds.value = { ...expandedBookingIds.value, [id]: true }
+  await nextTick()
+  document.getElementById(`booking-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function loadHistory() {
+  const tokenFn = getToken.value
+  const token = typeof tokenFn === 'function' ? await tokenFn() : null
+  if (!token)
+    return
+  await bookingStore.loadMine(token)
+  await focusBooking()
+}
+
+watch(isLoaded, (ready) => {
+  if (ready)
+    void loadHistory()
+}, { immediate: true })
 </script>
 
 <template>
@@ -121,12 +146,34 @@ function nextPage() {
           Booking History
         </h1>
 
+        <p
+          v-if="bookingStore.loading"
+          class="mt-10 text-body1 text-gray-700"
+          role="status"
+        >
+          Loading bookings…
+        </p>
+        <p
+          v-else-if="bookingStore.error"
+          class="mt-10 text-body1 text-red"
+          role="alert"
+        >
+          {{ bookingStore.error }}
+        </p>
+        <p
+          v-else-if="bookingStore.bookings.length === 0"
+          class="mt-10 text-body1 text-gray-700"
+        >
+          You have no bookings yet.
+        </p>
+
         <!-- Booking Cards List -->
-        <div class="mt-6 flex flex-col lg:mt-12">
+        <div v-else class="mt-6 flex flex-col lg:mt-12">
           <article
             v-for="booking in paginatedBookings"
             :key="booking.id"
-            class="-mx-4 border-b border-gray-300 py-6 lg:mx-0 lg:py-10"
+            :id="`booking-${booking.id}`"
+            class="-mx-4 scroll-mt-24 border-b border-gray-300 py-6 lg:mx-0 lg:py-10"
           >
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-12">
               <!-- Room Thumbnail -->
@@ -305,6 +352,7 @@ function nextPage() {
 
         <!-- Pagination -->
         <nav
+          v-if="!bookingStore.loading && bookingStore.bookings.length > 0"
           aria-label="Pagination"
           class="mt-10 flex items-center justify-center gap-2 lg:mt-16"
         >

@@ -41,6 +41,10 @@ public class RoomType extends BaseEntity {
 	@Column(nullable = false)
 	private Integer capacity = 2;
 
+	/** How many physical rooms of this type can be sold on overlapping dates. */
+	@Column(nullable = false, columnDefinition = "integer not null default 4")
+	private Integer totalUnits = 4;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 30)
 	private BedType bedType;

@@ -1,5 +1,6 @@
 -- Supabase only (Postgres: btree_gist, daterange, triggers). Run in Supabase SQL Editor after
--- 009_room_statuses_and_units.sql. Safe to run more than once. No entities or API use these tables yet.
+-- 009_room_statuses_and_units.sql. Safe to run more than once.
+-- Guest checkout columns, payments and promo codes are in 011_bookings_checkout.sql.
 
 create extension if not exists btree_gist;
 

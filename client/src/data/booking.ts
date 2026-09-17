@@ -17,6 +17,90 @@ export interface PriceBreakdownItem {
   isDiscount?: boolean
 }
 
+export interface GuestDetails {
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber: string
+  country: string
+}
+
+export type BasicInfoField = keyof GuestDetails | 'dateOfBirth'
+
+export type CheckoutPaymentMethod = 'credit' | 'cash'
+export type PaymentField = 'method' | 'cardNumber' | 'expiry' | 'cvc' | 'cardOwner'
+
+export interface CheckoutPayment {
+  method: CheckoutPaymentMethod
+  cardNumber: string
+  expiry: string
+  cvc: string
+  cardOwner: string
+  promotionCode: string
+}
+
+export interface RequestOption {
+  id: string
+  label: string
+}
+
+export interface SpecialRequestOption extends RequestOption {
+  price: number
+}
+
+/** Unconfirmed room preferences. Not added to the booking total. */
+export const standardRequests: RequestOption[] = [
+  { id: 'early-check-in', label: 'Early check-in' },
+  { id: 'late-check-out', label: 'Late check-out' },
+  { id: 'non-smoking', label: 'Non-smoking room' },
+  { id: 'high-floor', label: 'A room on the high floor' },
+  { id: 'quiet-room', label: 'A quiet room' },
+]
+
+/** Paid extras. Added to the booking total when selected. */
+export const specialRequests: SpecialRequestOption[] = [
+  { id: 'baby-cot', label: 'Baby cot', price: 400 },
+  { id: 'airport-transfer', label: 'Airport transfer', price: 200 },
+  { id: 'extra-bed', label: 'Extra bed', price: 500 },
+  { id: 'extra-pillows', label: 'Extra pillows', price: 100 },
+  { id: 'phone-chargers', label: 'Phone chargers and adapters', price: 100 },
+  { id: 'breakfast', label: 'Breakfast', price: 150 },
+]
+
+export const CHECK_IN_TIME_TEXT = 'After 2:00 PM'
+export const CHECK_OUT_TIME_TEXT = 'Before 12:00 PM'
+export const BOOKING_HOLD_SECONDS = 5 * 60
+
+/** Mock checkout codes. Amounts match the Figma payment breakdown. */
+export const BOOKING_PROMOTION_CODES: Record<string, number> = {
+  NEATLYNEW400: 400,
+}
+
+export function promotionDiscount(code: string) {
+  return BOOKING_PROMOTION_CODES[code.trim().toUpperCase()] ?? 0
+}
+
+export const BOOKING_POLICIES = [
+  'Cancel booking will get full refund if the cancellation occurs before 24 hours of the check-in date.',
+  'Able to change check-in or check-out date booking within 24 hours of the booking date',
+]
+
+export const CHECKOUT_STEPS = ['Basic Information', 'Special Request', 'Payment Method'] as const
+
+export function formatThb(amount: number) {
+  return amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+export function nightsBetween(start: DateValue, end: DateValue) {
+  const millisecondsPerDay = 86_400_000
+  return Math.round(
+    (end.toDate('UTC').getTime() - start.toDate('UTC').getTime()) / millisecondsPerDay,
+  )
+}
+
 export interface UserBooking {
   id: string
   roomName: string

@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `PUT /api/hotel` and `PUT /api/hotel/logo` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `PUT /api/hotel` and `PUT /api/hotel/logo` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -61,7 +61,7 @@ Every endpoint except `GET /api/health` wraps its payload:
 | 403 | Authenticated account has no profile or its role is not `agent` on a hotel write endpoint |
 | 500 | Unexpected error. **Currently also returned for malformed JSON and invalid UUID path params.** |
 | 502 | Upstream storage (Supabase) request failed |
-| 503 | Storage not configured |
+| 503 | Storage not configured, or Stripe secret / webhook signing secret missing |
 
 Swagger UI documents authentication errors on hotel write endpoints; other error codes below come from the handler and services. Security-filter `401` and `403` responses do not use the `ErrorResponse` envelope.
 
@@ -369,7 +369,7 @@ Update name and description. Values are trimmed before saving.
 ```
 
 - Response `200`: `ApiResponse<HotelInfoResponse>` with `message: "Hotel information updated"`
-- Errors: `401` missing/invalid Clerk token; `403` missing profile or non-agent role; `400` validation failed; `404` row missing; `400` malformed JSON
+- Errors: `401` missing/invalid Clerk token; `403` missing profile or non-agent role; `400` validation failed or malformed JSON; `404` row missing
 
 #### `PUT /api/hotel/logo`
 
@@ -465,6 +465,85 @@ Upload or replace the signed-in user's profile picture. The server derives the C
 
 - Errors: `400` invalid or missing image; `401` missing/invalid Clerk token; `413` image too large; `502` Supabase Storage failure; `503` Storage not configured
 
+### Bookings
+
+Guest checkout for a signed-in Clerk user. Prices, extras, and promo discounts are calculated on the server from `room_types` and `promotion_codes`. Inventory is `room_types.total_units` minus overlapping `booking_rooms` in `PENDING_PAYMENT`, `CONFIRMED`, or `CHECKED_IN` (expired Stripe drafts do not occupy a unit). Checkout inserts one `booking_rooms` row per requested room with `room_unit_id` null; a physical unit is assigned later. Money is THB `numeric(12,2)`; Stripe amounts are that value × 100.
+
+Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Element). Do not send PAN/CVC to this API.
+
+`CreateBookingRequest`:
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `roomTypeId` | UUID | yes | existing non-deleted room type |
+| `checkIn` | date | yes | ISO-8601 date |
+| `checkOut` | date | yes | must be after `checkIn` (`stayValid`) |
+| `guests` | integer | yes | 1–6, and ≤ room `capacity` |
+| `roomsCount` | integer | no | 1–10; default `1` |
+| `firstName` | string | yes | not blank; max 100 |
+| `lastName` | string | yes | not blank; max 100 |
+| `email` | string | yes | email; max 254 |
+| `phoneNumber` | string | yes | not blank; max 32 |
+| `country` | string | yes | not blank; max 100 |
+| `dateOfBirth` | date | yes | in the past; guest must be at least 18 |
+| `standardRequestCodes` | string[] | no | known preference codes (e.g. `early-check-in`) |
+| `specialRequestCodes` | string[] | no | known paid extras (e.g. `baby-cot`) |
+| `additionalRequest` | string | no | max 2000 |
+| `promotionCode` | string | no | max 40; unknown or inactive codes are ignored |
+| `paymentMethod` | enum | yes | `STRIPE` or `CASH` |
+
+`BookingResponse` (selected fields): `id`, `bookingNumber`, `roomTypeId`, `roomName`, `roomImageUrl`, `checkIn`, `checkOut`, `checkInTimeText`, `checkOutTimeText`, `guests`, `nights`, `roomsCount`, `status` (`PENDING_PAYMENT`, `CONFIRMED`, `CHECKED_IN`, `CHECKED_OUT`, `COMPLETED`, `CANCELLED`, `EXPIRED`), `paymentMethod`, guest fields, `standardRequests` (`{ code, label }[]`), `additionalRequest`, `promotionCode`, `currency` (`THB`), `items` (`kind` `ROOM` \| `ADDON` \| `DISCOUNT`), `roomSubtotal`, `extrasTotal`, `discountTotal`, `grandTotal`, `paymentMethodText`, `clientSecret` (Stripe Checkout client secret while a card payment is still pending; otherwise `null`), `holdExpiresAt`, `cancelledAt`, `createdAt`, `updatedAt`.
+
+Seeded promo: `NEATLYNEW400` (THB 400 off) from `011_bookings_checkout.sql` / `local_promotion_seed.sql`.
+
+#### `POST /api/bookings`
+
+Create a booking for the signed-in user (`sub` claim).
+
+- Auth: Clerk session token
+- Body: `CreateBookingRequest`
+- `CASH`: status `CONFIRMED` immediately, payment `UNPAID` (pay at hotel). No `clientSecret`.
+- `STRIPE`: status `PENDING_PAYMENT`, 5-minute hold (`holdExpiresAt`), a Checkout Session, and `clientSecret` for `stripe.initCheckoutElementsSdk`. Any other open Stripe draft for this user is expired first.
+- Response `201`: `ApiResponse<BookingResponse>` with `message: "Booking created"`
+- Errors: `400` validation / unknown extra or preference / guest count exceeds capacity; `401`; `404` room not found; `409` no remaining units for the dates; `502` Stripe API failure; `503` `STRIPE_SECRET_KEY` missing (cash still works)
+
+#### `GET /api/bookings`
+
+List the signed-in user's bookings, newest first. Includes `CONFIRMED`, `CHECKED_IN`, `COMPLETED`, and `CANCELLED` (not `PENDING_PAYMENT` or `EXPIRED`).
+
+- Auth: Clerk session token
+- Query: `page` (default `0`), `size` (default `10`, clamped 1–50)
+- Response `200`: `ApiResponse<PageResponse<BookingResponse>>`
+
+#### `GET /api/bookings/{id}`
+
+Get one booking owned by the signed-in user. If status is `PENDING_PAYMENT`, the server re-reads the Stripe session and may confirm it (`paid` → `CONFIRMED`) before responding.
+
+- Auth: Clerk session token
+- Response `200`: `ApiResponse<BookingResponse>` (`clientSecret` is set only while still pending)
+- Errors: `401`; `404` booking not found or not owned by this user
+
+#### `POST /api/bookings/{id}/payment-session`
+
+Create a new Stripe Checkout Session for an unpaid card booking (`PENDING_PAYMENT` or `EXPIRED`). Already `CONFIRMED` bookings are returned unchanged.
+
+- Auth: Clerk session token
+- Response `200`: `ApiResponse<BookingResponse>` with a fresh `clientSecret`
+- Errors: `400` not a card booking, or status cannot be paid; `401`; `404`; `409` no remaining units; `502` / `503` Stripe
+
+#### `POST /api/stripe/webhooks`
+
+Stripe event receiver. Not wrapped in `ApiResponse`. Hidden from Swagger.
+
+- Auth: none (verify `Stripe-Signature` with `STRIPE_WEBHOOK_SECRET`)
+- Body: raw Stripe event JSON
+- Handles `checkout.session.completed` (confirm booking, mark charge `SUCCEEDED`) and `checkout.session.expired` (booking `EXPIRED`)
+- Duplicate `event.id` values are ignored (`stripe_events`)
+- Response `200`: `{}`
+- Errors: `400` missing/invalid signature; `503` webhook secret not configured
+
+Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
+
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
@@ -474,6 +553,9 @@ Newest first. Mark breaking changes with **BREAKING**.
 - Added `GET/POST/PUT/DELETE /api/room-units` and `GET /api/room-units/statuses` for Admin Room Management (physical rooms on `room_units` / `room_statuses`).
 - Fixed leftover merge conflict markers in this file (hotel PUT errors + 2026-09-16 changelog).
 - Room amenities are now stored in a shared `amenities` table. Request and response shapes are unchanged; `amenities` in `RoomRequest` is trimmed and case-insensitive duplicates are dropped (first spelling kept), and an existing amenity name is reused with its stored spelling.
+- Added authenticated guest checkout: `POST /api/bookings`, `GET /api/bookings`, `GET /api/bookings/{id}`, `POST /api/bookings/{id}/payment-session`.
+- Added public `POST /api/stripe/webhooks` (Checkout Session completed/expired). Card checkout uses Stripe Checkout `ui_mode: elements`; cash confirms immediately as unpaid pay-at-hotel.
+- Bookings now share `dev`'s `booking_rooms` inventory model: checkout writes one unassigned room row per requested unit; Stripe/cash columns live in `011_bookings_checkout.sql`.
 
 ### 2026-09-16
 

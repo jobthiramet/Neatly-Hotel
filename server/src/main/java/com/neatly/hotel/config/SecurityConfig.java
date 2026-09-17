@@ -43,9 +43,10 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.PUT, "/api/hotel", "/api/hotel/**")
 						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
-						.requestMatchers("/api/profiles/**").authenticated()
+						.requestMatchers("/api/profiles/**", "/api/bookings/**").authenticated()
 						.requestMatchers(
 								"/api/health",
+								"/api/stripe/webhooks",
 								"/v3/api-docs/**",
 								"/swagger-ui/**",
 								"/swagger-ui.html")

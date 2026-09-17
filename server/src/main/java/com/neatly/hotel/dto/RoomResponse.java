@@ -1,4 +1,4 @@
-﻿package com.neatly.hotel.dto;
+package com.neatly.hotel.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
