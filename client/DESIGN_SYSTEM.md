@@ -239,6 +239,32 @@ Object URLs are revoked on remove, replace and unmount. File type and size check
 <ImageUpload id="logo" v-model="logo" accept="image/png,image/jpeg" :aria-invalid="!!errors.logo" aria-describedby="logo-error" />
 ```
 
+### ImageGalleryUpload — `admin / room & property / image gallery`
+
+`v-model` is an ordered array of image URLs and picked `File`s. Renders one `ImageUpload` tile per item (remove button included) plus an upload tile, hidden once `max` is reached.
+Tiles reorder by drag-and-drop or, for keyboard users, Alt + ←/→ on a focused tile. Type, size and count checks belong in the parent form; other attrs go to the upload tile's file input.
+
+```vue
+<ImageGalleryUpload id="gallery" v-model="gallery" :max="12" accept="image/png,image/jpeg,image/webp" :aria-invalid="!!errors.gallery" aria-describedby="gallery-error" />
+```
+
+### Pagination — `(admin) room & property / pagination`
+
+shadcn-vue style wrappers over Reka UI `Pagination*`: `‹ 1 … 4 5 6 … 20 ›` with the current page outlined in orange and the ends disabled. Reka computes the pages and ellipses; the parent owns `page` (1-based) and syncs it wherever it lives (e.g. the URL).
+
+```vue
+<Pagination aria-label="Pagination" :total="totalElements" :items-per-page="10" :page="page" :sibling-count="1" show-edges @update:page="goToPage">
+  <PaginationContent v-slot="{ items }">
+    <PaginationPrevious />
+    <template v-for="(item, index) in items" :key="index">
+      <PaginationItem v-if="item.type === 'page'" :value="item.value" />
+      <PaginationEllipsis v-else :index="index" />
+    </template>
+    <PaginationNext />
+  </PaginationContent>
+</Pagination>
+```
+
 ### Toast — shadcn-vue `sonner`
 
 `<Toaster />` is mounted once in `App.vue`. Call `toast` from `vue-sonner` anywhere.
@@ -254,6 +280,20 @@ toast.success('Hotel information updated')
 <MenuLink as-child :active="route.name === 'bookings'">
   <RouterLink to="/admin/bookings"><IconBooking /> Customer Booking</RouterLink>
 </MenuLink>
+```
+
+### Tabs: not in Figma yet, home Services section
+
+shadcn-vue tabs on Reka UI: `tablist` / `tab` / `tabpanel` roles, `aria-selected`, `aria-controls` and arrow-key navigation built in.
+Styled for dark green surfaces: `green-300` labels, white on hover, `orange-500` underline when selected. Put the icon in the trigger slot before the label.
+
+```vue
+<Tabs default-value="spa">
+  <TabsList aria-label="Services">
+    <TabsTrigger value="spa"><IconSpa class="size-15" /> Spa</TabsTrigger>
+  </TabsList>
+  <TabsContent value="spa">…</TabsContent>
+</Tabs>
 ```
 
 ### Carousel — `home / image slider` (17:53)
@@ -298,7 +338,8 @@ Don't use `data-force` in product code.
 2. **No arbitrary values.** `bg-[#fff]`, `p-[13px]`, `text-[18px]` and `[mask:…]` aren't allowed. CSS-variable shorthands such as `max-h-(--reka-select-content-available-height)` are fine.
 3. **Only theme classes.** Classes Tailwind doesn't know (like `text-sm`) fail the lint.
 4. **New tokens go into Figma first**, then into `tokens.css`, using the Figma name. If a designer hasn't defined it, ask before inventing one.
-5. **Icons come from Figma.** Export the SVG, replace its fills and strokes with `currentColor`, and add it to `src/components/icons`. Color icons with `text-*` utilities.
+5. **Stacking order.** Page content `z-10`–`z-20`, floating chat button `z-30`, sticky site navbar `z-40`, overlays (dialog, popover, select, date picker) `z-50`. Overlays are portalled to `<body>`, so they always sit above the navbar.
+6. **Icons come from Figma.** Export the SVG, replace its fills and strokes with `currentColor`, and add it to `src/components/icons`. Color icons with `text-*` utilities.
 
 ## 5. Adding a component
 

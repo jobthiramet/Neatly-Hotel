@@ -3,6 +3,9 @@ package com.neatly.hotel.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -14,10 +17,14 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.SecurityFilterChain;
+
+import com.neatly.hotel.exception.ResourceNotFoundException;
+import com.neatly.hotel.service.ProfileService;
 
 @Configuration
 @EnableWebSecurity
@@ -26,6 +33,7 @@ public class SecurityConfig {
 	@Bean
 	public SecurityFilterChain securityFilterChain(
 			HttpSecurity http,
+			ProfileService profileService,
 			@Value("${clerk.issuer:}") String issuer,
 			@Value("${clerk.authorized-party:}") String authorizedParty) throws Exception {
 		http
@@ -33,6 +41,8 @@ public class SecurityConfig {
 				.cors(Customizer.withDefaults())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
+						.requestMatchers(HttpMethod.PUT, "/api/hotel", "/api/hotel/**")
+						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
 						.requestMatchers("/api/profiles/**").authenticated()
 						.requestMatchers(
 								"/api/health",
@@ -43,11 +53,22 @@ public class SecurityConfig {
 						.anyRequest().permitAll());
 
 		JwtDecoder decoder = issuer.isBlank()
-				? token -> { throw new JwtException("Clerk issuer is not configured"); }
+				? token -> { throw new BadJwtException("Clerk issuer is not configured"); }
 				: clerkJwtDecoder(issuer, authorizedParty);
 		http.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(decoder)));
 
 		return http.build();
+	}
+
+	private boolean isAgent(Authentication authentication, ProfileService profileService) {
+		if (!(authentication instanceof JwtAuthenticationToken jwt) || !authentication.isAuthenticated()) {
+			return false;
+		}
+		try {
+			return "agent".equals(profileService.findByClerkUserId(jwt.getToken().getSubject()).role());
+		} catch (ResourceNotFoundException exception) {
+			return false;
+		}
 	}
 
 	private JwtDecoder clerkJwtDecoder(String issuer, String authorizedParty) {

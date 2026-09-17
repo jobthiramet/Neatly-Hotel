@@ -1,26 +1,67 @@
+﻿import { isAxiosError } from 'axios'
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
 import { api } from '@/api/client'
-import type { RoomStatus } from '@/components/ui/badge'
-import { apiErrorMessage } from '@/stores/hotel'
 
-/** Matches `RoomResponse` in docs/API.md. */
-export interface RoomResponse {
-  id: string
-  roomNumber: string
-  roomType: string
-  bedType: string
-  status: RoomStatus | string
-  pricePerNight: number
-  capacity: number
-  active: boolean
+/** Types below match the Rooms section of docs/API.md. */
+export type BedType = 'SINGLE' | 'DOUBLE' | 'KING' | 'TWIN'
+
+export const BED_TYPE_LABELS: Record<BedType, string> = {
+  SINGLE: 'Single bed',
+  DOUBLE: 'Double bed',
+  KING: 'Double bed (king size)',
+  TWIN: 'Twin bed',
 }
 
-export interface CreateRoomPayload {
-  roomNumber: string
-  roomType: string
-  bedType: string
-  status: string
+export interface RoomImage {
+  id: string
+  url: string
+}
+
+export interface RoomResponse {
+  id: string
+  name: string
+  bedType: BedType
+  sizeSqm: number
+  capacity: number
+  pricePerNight: number
+  promotionPrice: number | null
+  description: string
+  amenities: string[]
+  mainImage: RoomImage | null
+  gallery: RoomImage[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RoomSummary {
+  id: string
+  name: string
+  mainImageUrl: string | null
+  pricePerNight: number
+  promotionPrice: number | null
+  capacity: number
+  bedType: BedType
+  sizeSqm: number
+}
+
+export interface PageResponse<T> {
+  content: T[]
+  /** Zero-based. */
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export interface RoomRequest {
+  name: string
+  bedType: BedType
+  sizeSqm: number
+  capacity: number
+  pricePerNight: number
+  promotionPrice: number | null
+  description: string
+  amenities: string[]
 }
 
 interface ApiResponse<T> {
@@ -29,36 +70,74 @@ interface ApiResponse<T> {
   data: T
 }
 
-export const useRoomsStore = defineStore('rooms', () => {
-  const rooms = ref<RoomResponse[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+// Override the instance's JSON default so axios sends real multipart data.
+const multipart = { headers: { 'Content-Type': 'multipart/form-data' } }
 
-  const sortedRooms = computed(() =>
-    [...rooms.value].sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true })),
-  )
-
-  async function fetchAll() {
-    loading.value = true
-    error.value = null
-    try {
-      const { data } = await api.get<ApiResponse<RoomResponse[]>>('/rooms')
-      rooms.value = data.data ?? []
-    }
-    catch (e) {
-      error.value = apiErrorMessage(e, 'Could not load rooms.')
-      throw e
-    }
-    finally {
-      loading.value = false
-    }
+/**
+ * Field errors from a 400 `Validation failed` response, keyed by request field
+ * (`amenities[0]` becomes `amenities`, the promotion price check becomes `promotionPrice`).
+ */
+export function apiFieldErrors(error: unknown): Record<string, string> {
+  const details: unknown = isAxiosError(error) ? error.response?.data?.details : undefined
+  const errors: Record<string, string> = {}
+  if (!Array.isArray(details))
+    return errors
+  for (const detail of details) {
+    const match = /^([\w.]+?)(?:\[\d+\])?: (.+)$/.exec(String(detail))
+    if (!match)
+      continue
+    const field = match[1] === 'promotionPriceValid' ? 'promotionPrice' : match[1]!
+    errors[field] ??= match[2]!
   }
+  return errors
+}
 
-  async function create(payload: CreateRoomPayload) {
-    const { data } = await api.post<ApiResponse<RoomResponse>>('/rooms', payload)
-    rooms.value = [...rooms.value, data.data]
+export const useRoomsStore = defineStore('rooms', () => {
+  /** Pass `signal` to cancel a superseded request (e.g. while typing a search). */
+  async function list(params: { search: string, page: number, size: number }, options: { signal?: AbortSignal } = {}) {
+    const { data } = await api.get<ApiResponse<PageResponse<RoomSummary>>>('/rooms', { params, signal: options.signal })
     return data.data
   }
 
-  return { rooms, sortedRooms, loading, error, fetchAll, create }
+  async function get(id: string) {
+    const { data } = await api.get<ApiResponse<RoomResponse>>(`/rooms/${id}`)
+    return data.data
+  }
+
+  async function create(room: RoomRequest, mainImage: File, gallery: File[]) {
+    const body = new FormData()
+    body.append('room', new Blob([JSON.stringify(room)], { type: 'application/json' }))
+    body.append('mainImage', mainImage)
+    gallery.forEach(file => body.append('gallery', file))
+    const { data } = await api.post<ApiResponse<RoomResponse>>('/rooms', body, multipart)
+    return data.data
+  }
+
+  async function update(id: string, room: RoomRequest) {
+    const { data } = await api.put<ApiResponse<RoomResponse>>(`/rooms/${id}`, room)
+    return data.data
+  }
+
+  async function remove(id: string) {
+    await api.delete(`/rooms/${id}`)
+  }
+
+  async function uploadImage(id: string, file: File, main: boolean) {
+    const body = new FormData()
+    body.append('file', file)
+    const { data } = await api.post<ApiResponse<RoomResponse>>(`/rooms/${id}/images`, body, { ...multipart, params: { main } })
+    return data.data
+  }
+
+  async function removeImage(id: string, imageId: string) {
+    const { data } = await api.delete<ApiResponse<RoomResponse>>(`/rooms/${id}/images/${imageId}`)
+    return data.data
+  }
+
+  async function reorderImages(id: string, imageIds: string[]) {
+    const { data } = await api.put<ApiResponse<RoomResponse>>(`/rooms/${id}/images/order`, { imageIds })
+    return data.data
+  }
+
+  return { list, get, create, update, remove, uploadImage, removeImage, reorderImages }
 })

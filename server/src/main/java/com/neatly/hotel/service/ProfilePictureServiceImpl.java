@@ -14,10 +14,7 @@ import com.neatly.hotel.exception.ApiException;
 public class ProfilePictureServiceImpl implements ProfilePictureService {
 
 	private static final long MAX_BYTES = 5 * 1024 * 1024;
-	private static final Map<String, String> EXTENSIONS = Map.of(
-			"image/png", "png",
-			"image/jpeg", "jpg",
-			"image/webp", "webp");
+	private static final Map<String, String> EXTENSIONS = ImageFiles.EXTENSIONS;
 
 	private final StorageService storageService;
 	private final String bucket;
@@ -47,7 +44,7 @@ public class ProfilePictureServiceImpl implements ProfilePictureService {
 			throw new ApiException("Profile picture must be a PNG, JPEG or WEBP image", HttpStatus.BAD_REQUEST);
 		}
 		byte[] content = read(file);
-		if (!matchesSignature(content, contentType)) {
+		if (!ImageFiles.hasSignature(contentType, content)) {
 			throw new ApiException("Profile picture content does not match its type", HttpStatus.BAD_REQUEST);
 		}
 
@@ -62,24 +59,5 @@ public class ProfilePictureServiceImpl implements ProfilePictureService {
 		} catch (IOException ex) {
 			throw new ApiException("Could not read profile picture", HttpStatus.BAD_REQUEST);
 		}
-	}
-
-	private boolean matchesSignature(byte[] content, String contentType) {
-		return switch (contentType) {
-			case "image/png" -> startsWith(content, new int[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
-			case "image/jpeg" -> startsWith(content, new int[] { 0xFF, 0xD8, 0xFF });
-			case "image/webp" -> startsWith(content, new int[] { 'R', 'I', 'F', 'F' })
-					&& content.length >= 12
-					&& content[8] == 'W' && content[9] == 'E' && content[10] == 'B' && content[11] == 'P';
-			default -> false;
-		};
-	}
-
-	private boolean startsWith(byte[] content, int[] signature) {
-		if (content.length < signature.length) return false;
-		for (int i = 0; i < signature.length; i++) {
-			if ((content[i] & 0xFF) != signature[i]) return false;
-		}
-		return true;
 	}
 }

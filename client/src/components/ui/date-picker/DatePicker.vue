@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date'
 import type { HTMLAttributes, Ref } from 'vue'
-import { DateFormatter, getLocalTimeZone } from '@internationalized/date'
+import { DateFormatter, getLocalTimeZone, today } from '@internationalized/date'
 import { useVModel } from '@vueuse/core'
-import { computed } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { IconCalendar } from '@/components/icons'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -17,6 +17,8 @@ const props = withDefaults(defineProps<{
   invalid?: boolean
   minValue?: DateValue
   maxValue?: DateValue
+  /** Header year select range when `minValue`/`maxValue` aren't set. */
+  yearRange?: [number, number]
   ariaDescribedby?: string
   class?: HTMLAttributes['class']
 }>(), {
@@ -29,13 +31,29 @@ const emits = defineEmits<{
 
 const value = useVModel(props, 'modelValue', emits, { passive: true }) as Ref<DateValue | undefined>
 
+// The month shown in the calendar. Owned here (two-way) so the header's month/year
+// selects and the arrows can move it; a one-way binding reverted every change.
+const open = ref(false)
+const visibleMonth = shallowRef<DateValue>(today(getLocalTimeZone()))
+
+function onOpenChange(isOpen: boolean) {
+  if (isOpen)
+    visibleMonth.value = value.value ?? props.maxValue ?? today(getLocalTimeZone())
+  open.value = isOpen
+}
+
+function onSelect(date: DateValue | undefined) {
+  value.value = date
+  open.value = false
+}
+
 const formatter = new DateFormatter('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 const label = computed(() => value.value ? formatter.format(value.value.toDate(getLocalTimeZone())) : undefined)
 </script>
 
 <!-- Figma: input style / style=date picker (12:365) + Date Picker (106:4311) -->
 <template>
-  <Popover>
+  <Popover :open="open" @update:open="onOpenChange">
     <PopoverTrigger as-child>
       <button
         type="button"
@@ -55,13 +73,15 @@ const label = computed(() => value.value ? formatter.format(value.value.toDate(g
       </button>
     </PopoverTrigger>
     <PopoverContent>
-    <Calendar
-      v-model="value"
-      :min-value="minValue"
-      :max-value="maxValue"
-      :placeholder="value ?? maxValue"
-      initial-focus
-    />
+      <Calendar
+        v-model:placeholder="visibleMonth"
+        :model-value="value"
+        :min-value="minValue"
+        :max-value="maxValue"
+        :year-range="yearRange"
+        initial-focus
+        @update:model-value="onSelect"
+      />
     </PopoverContent>
   </Popover>
 </template>

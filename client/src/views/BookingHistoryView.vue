@@ -2,9 +2,9 @@
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date'
 import { DateFormatter, getLocalTimeZone } from '@internationalized/date'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { IconCaretDown } from '@/components/icons'
+import { IconCaretDown, IconChevronRight } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
@@ -83,7 +83,26 @@ function proceedToCancel() {
 
 // Pagination state
 const currentPage = ref(1)
-const totalPages = 5
+const itemsPerPage = ref(4)
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(bookingStore.bookings.length / itemsPerPage.value)),
+)
+const paginatedBookings = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  return bookingStore.bookings.slice(start, start + itemsPerPage.value)
+})
+
+function prevPage() {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+function nextPage() {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
 </script>
 
 <template>
@@ -105,7 +124,7 @@ const totalPages = 5
         <!-- Booking Cards List -->
         <div class="mt-6 flex flex-col lg:mt-12">
           <article
-            v-for="booking in bookingStore.bookings"
+            v-for="booking in paginatedBookings"
             :key="booking.id"
             class="-mx-4 border-b border-gray-300 py-6 lg:mx-0 lg:py-10"
           >
@@ -291,21 +310,23 @@ const totalPages = 5
         >
           <button
             type="button"
-            class="flex size-8 items-center justify-center rounded-sm text-body2 text-gray-400 outline-none is-focus:ring-2 is-focus:ring-ring"
+            class="flex size-8 items-center justify-center rounded-sm text-body2 outline-none transition-colors is-focus:ring-2 is-focus:ring-ring"
+            :class="currentPage === 1 ? 'cursor-not-allowed text-gray-400' : 'cursor-pointer text-gray-600 is-hover:text-black'"
             :disabled="currentPage === 1"
             aria-label="Previous page"
+            @click="prevPage"
           >
-            &lt;
+            <IconChevronRight class="size-4 rotate-180" />
           </button>
 
           <button
             v-for="page in totalPages"
             :key="page"
             type="button"
-            class="flex size-8 items-center justify-center rounded-sm text-body2 outline-none is-focus:ring-2 is-focus:ring-ring"
+            class="flex size-8 items-center justify-center rounded-sm text-body2 outline-none transition-colors is-focus:ring-2 is-focus:ring-ring"
             :class="page === currentPage
-              ? 'border border-orange-500 font-semibold text-orange-500'
-              : 'text-gray-700 is-hover:text-black'"
+              ? 'border border-gray-300 bg-white font-semibold text-green-700'
+              : 'cursor-pointer text-gray-600 is-hover:text-black'"
             :aria-current="page === currentPage ? 'page' : undefined"
             @click="currentPage = page"
           >
@@ -314,10 +335,13 @@ const totalPages = 5
 
           <button
             type="button"
-            class="flex size-8 items-center justify-center rounded-sm text-body2 text-gray-700 outline-none is-hover:text-black is-focus:ring-2 is-focus:ring-ring"
+            class="flex size-8 items-center justify-center rounded-sm text-body2 outline-none transition-colors is-focus:ring-2 is-focus:ring-ring"
+            :class="currentPage === totalPages ? 'cursor-not-allowed text-gray-400' : 'cursor-pointer text-gray-600 is-hover:text-black'"
+            :disabled="currentPage === totalPages"
             aria-label="Next page"
+            @click="nextPage"
           >
-            &gt;
+            <IconChevronRight class="size-4" />
           </button>
         </nav>
       </section>
@@ -325,38 +349,34 @@ const totalPages = 5
 
     <!-- Cancel Booking Confirmation Dialog -->
     <Dialog v-model:open="cancelDialogOpen">
-      <DialogContent class="w-11/12 max-w-130 sm:w-full">
+      <DialogContent class="w-11/12 sm:w-full">
         <DialogHeader>
           <DialogTitle>Cancel Booking</DialogTitle>
         </DialogHeader>
 
-        <DialogDescription class="text-body1 text-gray-700">
-          <template v-if="selectedBooking?.status === 'checkin-soon'">
-            Cancellation of the booking now will not be able to request a refund.
+        <DialogDescription as="div" class="p-6 text-body1 text-gray-700">
+          <p v-if="selectedBooking?.status === 'checkin-soon'">
+            Cancellation of the booking now will not be able to request a refund.<br>
             Are you sure you would like to cancel this booking?
-          </template>
-          <template v-else>
+          </p>
+          <p v-else>
             Are you sure you would like to cancel this booking?
-          </template>
+          </p>
         </DialogDescription>
 
-        <DialogFooter class="flex flex-col gap-4 px-6 pb-6 sm:flex-col sm:justify-start">
-          <DialogClose as-child>
-            <Button
-              type="button"
-              class="w-full"
-            >
-              No, Don't Cancel
-            </Button>
-          </DialogClose>
-
+        <DialogFooter class="flex flex-row flex-wrap justify-end gap-4 px-6 pb-6">
           <Button
             variant="secondary"
-            class="w-full"
             @click="proceedToCancel"
           >
             {{ selectedBooking?.status === 'checkin-soon' ? 'Yes, I want to cancel' : 'Yes, I want to cancel and request refund' }}
           </Button>
+
+          <DialogClose as-child>
+            <Button type="button">
+              No, Don’t Cancel
+            </Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

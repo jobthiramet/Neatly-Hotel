@@ -15,6 +15,7 @@ import com.neatly.hotel.dto.UpdateHotelInfoRequest;
 import com.neatly.hotel.service.HotelInfoService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -35,18 +36,22 @@ public class HotelInfoController {
 		return ApiResponse.ok(hotelInfoService.get());
 	}
 
-	// TODO(auth): restrict to admins once Supabase JWT auth is wired.
 	@PutMapping
-	@Operation(summary = "Update hotel name and description")
+	@SecurityRequirement(name = "clerkBearer")
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid Clerk token")
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Profile is missing or role is not agent")
+	@Operation(summary = "Update hotel name and description", description = "Requires a Clerk session and agent role in the database profile.")
 	public ApiResponse<HotelInfoResponse> update(@Valid @RequestBody UpdateHotelInfoRequest request) {
 		return ApiResponse.ok("Hotel information updated", hotelInfoService.update(request));
 	}
 
-	// TODO(auth): restrict to admins once Supabase JWT auth is wired.
 	@PutMapping(path = "/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	@SecurityRequirement(name = "clerkBearer")
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid Clerk token")
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Profile is missing or role is not agent")
 	@Operation(
 			summary = "Upload and replace hotel logo",
-			description = "Multipart field `file`: PNG, JPEG or WEBP, max 2 MB. Returns 503 when storage is not configured.")
+			description = "Requires a Clerk session and agent role in the database profile. Multipart field `file`: PNG, JPEG or WEBP, max 2 MB. Returns 503 when storage is not configured.")
 	public ApiResponse<HotelInfoResponse> replaceLogo(@RequestPart("file") MultipartFile file) {
 		return ApiResponse.ok("Hotel logo updated", hotelInfoService.replaceLogo(file));
 	}

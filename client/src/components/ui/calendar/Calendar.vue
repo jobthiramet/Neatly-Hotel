@@ -6,7 +6,11 @@ import { CalendarRoot, useForwardPropsEmits } from 'reka-ui'
 import { cn } from '@/lib/utils'
 import { CalendarCell, CalendarCellTrigger, CalendarGrid, CalendarGridBody, CalendarGridHead, CalendarGridRow, CalendarHeadCell, CalendarHeader, CalendarHeading, CalendarNextButton, CalendarPrevButton } from '.'
 
-const props = withDefaults(defineProps<CalendarRootProps & { class?: HTMLAttributes['class'] }>(), {
+const props = withDefaults(defineProps<CalendarRootProps & {
+  /** Header year select range when `minValue`/`maxValue` aren't set. */
+  yearRange?: [number, number]
+  class?: HTMLAttributes['class']
+}>(), {
   modelValue: undefined,
   weekdayFormat: 'narrow',
   weekStartsOn: 1,
@@ -15,7 +19,7 @@ const props = withDefaults(defineProps<CalendarRootProps & { class?: HTMLAttribu
 })
 const emits = defineEmits<CalendarRootEmits>()
 
-const delegatedProps = reactiveOmit(props, 'class')
+const delegatedProps = reactiveOmit(props, 'class', 'yearRange')
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
@@ -29,7 +33,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     :class="cn('w-64 bg-white', props.class)"
   >
     <CalendarHeader>
-      <CalendarHeading />
+      <CalendarHeading :year-range="yearRange" />
       <nav class="flex items-center gap-2">
         <CalendarPrevButton />
         <CalendarNextButton />

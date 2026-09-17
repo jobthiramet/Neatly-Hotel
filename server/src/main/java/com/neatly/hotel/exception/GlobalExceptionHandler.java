@@ -5,9 +5,11 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
@@ -30,6 +32,11 @@ public class GlobalExceptionHandler {
 				.map(error -> error.getField() + ": " + error.getDefaultMessage())
 				.toList();
 		return build(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), details);
+	}
+
+	@ExceptionHandler({ HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class })
+	public ResponseEntity<ErrorResponse> handleUnreadable(Exception ex, HttpServletRequest request) {
+		return build(HttpStatus.BAD_REQUEST, "Malformed request", request.getRequestURI(), List.of());
 	}
 
 	@ExceptionHandler(MaxUploadSizeExceededException.class)
