@@ -23,7 +23,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "rooms")
+@Table(name = "room_types")
 public class Room extends BaseEntity {
 
 	/** Shown as "Room type" in the admin UI. */

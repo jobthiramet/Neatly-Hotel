@@ -1,7 +1,7 @@
 -- Local (H2) profile only: the six Figma room types from seed/rooms.json, without images
 -- (storage is not configured locally). Timestamps keep the Figma order in the newest-first list. Supabase rooms are seeded with seed-rooms.ps1. Do not run in Supabase.
 
-insert into rooms (id, created_at, updated_at, name, price_per_night, capacity, bed_type, size_sqm, promotion_price, description, amenities)
+insert into room_types (id, created_at, updated_at, name, price_per_night, capacity, bed_type, size_sqm, promotion_price, description, amenities)
 select * from (values
   ('00000000-0000-0000-0001-000000000001', timestamp '2026-09-16 00:00:00', timestamp '2026-09-16 00:00:00', 'Superior Garden View', 3000.00, 2, 'DOUBLE', 32, 2500.00, 'Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.', array['Safe in Room', 'Air Conditioning', 'High speed internet connection', 'Hairdryer', 'Shower', 'Bathroom amenities', 'Lamp', 'Minibar', 'Telephone', 'Ironing board', 'A floor only accessible via a guest room key', 'Alarm clock', 'Bathrobe']),
   ('00000000-0000-0000-0001-000000000002', timestamp '2026-09-15 00:00:00', timestamp '2026-09-15 00:00:00', 'Deluxe', 3000.00, 2, 'DOUBLE', 32, 2500.00, 'Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.', array['Safe in Room', 'Air Conditioning', 'High speed internet connection', 'Hairdryer', 'Shower', 'Bathroom amenities', 'Lamp', 'Minibar', 'Telephone', 'Ironing board', 'A floor only accessible via a guest room key', 'Alarm clock', 'Bathrobe']),
@@ -10,4 +10,4 @@ select * from (values
   ('00000000-0000-0000-0001-000000000005', timestamp '2026-09-12 00:00:00', timestamp '2026-09-12 00:00:00', 'Supreme', 3000.00, 2, 'DOUBLE', 32, 2500.00, 'Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.', array['Safe in Room', 'Air Conditioning', 'High speed internet connection', 'Hairdryer', 'Shower', 'Bathroom amenities', 'Lamp', 'Minibar', 'Telephone', 'Ironing board', 'A floor only accessible via a guest room key', 'Alarm clock', 'Bathrobe']),
   ('00000000-0000-0000-0001-000000000006', timestamp '2026-09-11 00:00:00', timestamp '2026-09-11 00:00:00', 'Suite', 3000.00, 2, 'DOUBLE', 32, 2500.00, 'Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.', array['Safe in Room', 'Air Conditioning', 'High speed internet connection', 'Hairdryer', 'Shower', 'Bathroom amenities', 'Lamp', 'Minibar', 'Telephone', 'Ironing board', 'A floor only accessible via a guest room key', 'Alarm clock', 'Bathrobe'])
 ) as seed (id, created_at, updated_at, name, price_per_night, capacity, bed_type, size_sqm, promotion_price, description, amenities)
-where not exists (select 1 from rooms);
+where not exists (select 1 from room_types);

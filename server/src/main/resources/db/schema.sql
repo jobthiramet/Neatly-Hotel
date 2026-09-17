@@ -1,7 +1,7 @@
 -- Paste into Supabase Dashboard → SQL Editor, then Run.
 -- Required before starting the backend with profile=supabase (ddl-auto=validate).
 
-create table if not exists rooms (
+create table if not exists room_types (
   id uuid primary key,
   created_at timestamptz not null,
   updated_at timestamptz not null,
