@@ -5,16 +5,17 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 
 import lombok.Getter;
@@ -24,7 +25,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "room_types")
-public class Room extends BaseEntity {
+public class RoomType extends BaseEntity {
 
 	/** Shown as "Room type" in the admin UI. */
 	@Column(nullable = false, length = 120)
@@ -50,15 +51,19 @@ public class Room extends BaseEntity {
 	@Column(nullable = false, columnDefinition = "text")
 	private String description;
 
-	/** Display order is array order. */
-	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(nullable = false)
-	private List<String> amenities = new ArrayList<>();
+	/** Display order is list order. */
+	@ManyToMany
+	@JoinTable(
+			name = "room_type_amenities",
+			joinColumns = @JoinColumn(name = "room_type_id"),
+			inverseJoinColumns = @JoinColumn(name = "amenity_id"))
+	@OrderColumn(name = "sort_order")
+	private List<Amenity> amenities = new ArrayList<>();
 
 	/** Soft delete. Queries filter on this explicitly so relations can still load deleted rooms. */
 	private Instant deletedAt;
 
-	@OneToMany(mappedBy = "room", cascade = CascadeType.ALL)
+	@OneToMany(mappedBy = "roomType", cascade = CascadeType.ALL)
 	@OrderBy("sortOrder ASC")
-	private List<RoomImage> images = new ArrayList<>();
+	private List<RoomTypeImage> images = new ArrayList<>();
 }

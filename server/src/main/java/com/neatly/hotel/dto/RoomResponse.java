@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.UUID;
 
 import com.neatly.hotel.model.BedType;
-import com.neatly.hotel.model.Room;
+import com.neatly.hotel.model.Amenity;
+import com.neatly.hotel.model.RoomType;
 
 public record RoomResponse(
 		UUID id,
@@ -23,7 +24,7 @@ public record RoomResponse(
 		Instant createdAt,
 		Instant updatedAt) {
 
-	public static RoomResponse from(Room room) {
+	public static RoomResponse from(RoomType room) {
 		return new RoomResponse(
 				room.getId(),
 				room.getName(),
@@ -33,7 +34,7 @@ public record RoomResponse(
 				room.getPricePerNight(),
 				room.getPromotionPrice(),
 				room.getDescription(),
-				List.copyOf(room.getAmenities()),
+				room.getAmenities().stream().map(Amenity::getName).toList(),
 				room.getImages().stream().filter(image -> image.getIsMain()).findFirst().map(RoomImageResponse::from).orElse(null),
 				room.getImages().stream().filter(image -> !image.getIsMain()).map(RoomImageResponse::from).toList(),
 				room.getCreatedAt(),

@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 import com.neatly.hotel.model.BedType;
-import com.neatly.hotel.model.Room;
+import com.neatly.hotel.model.RoomType;
 
 /** One row of the admin room list. */
 public record RoomSummaryResponse(
@@ -17,7 +17,7 @@ public record RoomSummaryResponse(
 		BedType bedType,
 		Integer sizeSqm) {
 
-	public static RoomSummaryResponse from(Room room) {
+	public static RoomSummaryResponse from(RoomType room) {
 		return new RoomSummaryResponse(
 				room.getId(),
 				room.getName(),

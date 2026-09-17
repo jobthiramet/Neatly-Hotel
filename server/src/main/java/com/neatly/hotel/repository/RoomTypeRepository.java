@@ -9,20 +9,20 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.neatly.hotel.model.Room;
+import com.neatly.hotel.model.RoomType;
 
-public interface RoomRepository extends JpaRepository<Room, UUID> {
+public interface RoomTypeRepository extends JpaRepository<RoomType, UUID> {
 
 	/** Non-deleted rooms whose name or bed type contains {@code search} (case-insensitive). */
 	@Query("""
-			select r from Room r
+			select r from RoomType r
 			where r.deletedAt is null
 			  and (:search = '' or lower(r.name) like concat('%', :search, '%')
 			       or lower(cast(r.bedType as string)) like concat('%', :search, '%'))
 			""")
-	Page<Room> searchActive(@Param("search") String search, Pageable pageable);
+	Page<RoomType> searchActive(@Param("search") String search, Pageable pageable);
 
-	Optional<Room> findByIdAndDeletedAtIsNull(UUID id);
+	Optional<RoomType> findByIdAndDeletedAtIsNull(UUID id);
 
 	boolean existsByNameIgnoreCaseAndDeletedAtIsNull(String name);
 

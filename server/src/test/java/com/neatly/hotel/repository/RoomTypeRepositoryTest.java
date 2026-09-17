@@ -17,19 +17,26 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 import com.neatly.hotel.model.BedType;
-import com.neatly.hotel.model.Room;
+import com.neatly.hotel.model.RoomType;
+
+import jakarta.persistence.EntityManager;
 
 @DataJpaTest
-class RoomRepositoryTest {
+class RoomTypeRepositoryTest {
 
 	@Autowired
-	private RoomRepository repository;
+	private RoomTypeRepository repository;
 
-	private Room deleted;
+	@Autowired
+	private EntityManager entityManager;
+
+	private RoomType deleted;
 
 	@BeforeEach
 	void setUp() {
-		repository.deleteAll(); // the local profile seeds sample rooms
+		// the local profile seeds sample rooms and room units that reference them
+		entityManager.createNativeQuery("delete from room_units").executeUpdate();
+		repository.deleteAll();
 		repository.save(room("Superior Garden View", BedType.DOUBLE, null));
 		repository.save(room("Deluxe", BedType.KING, null));
 		repository.save(room("Suite", BedType.TWIN, null));
@@ -46,7 +53,7 @@ class RoomRepositoryTest {
 
 	@Test
 	void searchPaginates() {
-		Page<Room> first = repository.searchActive("", page(2));
+		Page<RoomType> first = repository.searchActive("", page(2));
 
 		assertEquals(2, first.getContent().size());
 		assertEquals(2, first.getTotalPages());
@@ -64,19 +71,18 @@ class RoomRepositoryTest {
 		return PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 	}
 
-	private static List<String> names(Page<Room> page) {
-		return page.getContent().stream().map(Room::getName).toList();
+	private static List<String> names(Page<RoomType> page) {
+		return page.getContent().stream().map(RoomType::getName).toList();
 	}
 
-	private static Room room(String name, BedType bedType, Instant deletedAt) {
-		Room room = new Room();
+	private static RoomType room(String name, BedType bedType, Instant deletedAt) {
+		RoomType room = new RoomType();
 		room.setName(name);
 		room.setBedType(bedType);
 		room.setSizeSqm(30);
 		room.setCapacity(2);
 		room.setPricePerNight(new BigDecimal("3000.00"));
 		room.setDescription("Room");
-		room.setAmenities(List.of("Shower"));
 		room.setDeletedAt(deletedAt);
 		return room;
 	}

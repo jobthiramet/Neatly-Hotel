@@ -11,7 +11,7 @@ import com.neatly.hotel.dto.RoomRequest;
 import com.neatly.hotel.dto.RoomResponse;
 import com.neatly.hotel.dto.RoomSummaryResponse;
 
-public interface RoomService {
+public interface RoomTypeService {
 
 	PageResponse<RoomSummaryResponse> list(String search, int page, int size);
 

@@ -34,34 +34,39 @@ import com.neatly.hotel.dto.RoomRequest;
 import com.neatly.hotel.dto.RoomResponse;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.exception.ResourceNotFoundException;
+import com.neatly.hotel.model.Amenity;
 import com.neatly.hotel.model.BedType;
-import com.neatly.hotel.model.Room;
-import com.neatly.hotel.model.RoomImage;
-import com.neatly.hotel.repository.RoomImageRepository;
-import com.neatly.hotel.repository.RoomRepository;
+import com.neatly.hotel.model.RoomType;
+import com.neatly.hotel.model.RoomTypeImage;
+import com.neatly.hotel.repository.AmenityRepository;
+import com.neatly.hotel.repository.RoomTypeImageRepository;
+import com.neatly.hotel.repository.RoomTypeRepository;
 
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 
-class RoomServiceImplTest {
+class RoomTypeServiceImplTest {
 
 	private static final String BUCKET = "room-images";
 	private static final byte[] PNG = { (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0 };
 
-	private final RoomRepository repository = mock(RoomRepository.class);
-	private final RoomImageRepository imageRepository = mock(RoomImageRepository.class);
+	private final RoomTypeRepository repository = mock(RoomTypeRepository.class);
+	private final RoomTypeImageRepository imageRepository = mock(RoomTypeImageRepository.class);
+	private final AmenityRepository amenityRepository = mock(AmenityRepository.class);
 	private final StorageService storage = mock(StorageService.class);
-	private final RoomServiceImpl service = new RoomServiceImpl(repository, imageRepository, storage, BUCKET);
+	private final RoomTypeServiceImpl service = new RoomTypeServiceImpl(repository, imageRepository, amenityRepository, storage, BUCKET);
 
 	@BeforeEach
 	void setUp() {
-		when(repository.saveAndFlush(any(Room.class))).thenAnswer(call -> {
-			Room room = call.getArgument(0);
+		when(repository.saveAndFlush(any(RoomType.class))).thenAnswer(call -> {
+			RoomType room = call.getArgument(0);
 			if (room.getId() == null) {
 				room.setId(UUID.randomUUID());
 			}
 			return room;
 		});
+		when(amenityRepository.findByNameIgnoreCase(anyString())).thenReturn(Optional.empty());
+		when(amenityRepository.save(any(Amenity.class))).thenAnswer(call -> call.getArgument(0));
 		when(storage.uploadOrReplace(eq(BUCKET), anyString(), any(), anyString()))
 				.thenAnswer(call -> "https://x.supabase.co/storage/v1/object/public/room-images/" + call.getArgument(1));
 	}
@@ -132,7 +137,7 @@ class RoomServiceImplTest {
 	@Test
 	void softDeleteSetsDeletedAtAndLaterLookupsAre404() {
 		UUID id = UUID.randomUUID();
-		Room room = room(id, 4);
+		RoomType room = room(id, 4);
 		when(repository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(room)).thenReturn(Optional.empty());
 
 		service.delete(id);
@@ -146,8 +151,8 @@ class RoomServiceImplTest {
 	void listClampsPageSizeAndLowercasesSearch() {
 		when(repository.searchActive(eq("deluxe"), any(Pageable.class))).thenAnswer(call -> {
 			Pageable pageable = call.getArgument(1);
-			assertEquals(RoomServiceImpl.MAX_PAGE_SIZE, pageable.getPageSize());
-			return new PageImpl<Room>(List.of(), pageable, 0);
+			assertEquals(RoomTypeServiceImpl.MAX_PAGE_SIZE, pageable.getPageSize());
+			return new PageImpl<RoomType>(List.of(), pageable, 0);
 		});
 
 		assertEquals(0, service.list("  Deluxe ", -1, 500).totalElements());
@@ -164,8 +169,8 @@ class RoomServiceImplTest {
 	@Test
 	void replacingMainImageDeletesOldObjectAfterSave() {
 		UUID id = UUID.randomUUID();
-		Room room = room(id, 4);
-		RoomImage oldMain = room.getImages().getFirst();
+		RoomType room = room(id, 4);
+		RoomTypeImage oldMain = room.getImages().getFirst();
 		when(repository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(room));
 
 		RoomResponse response = service.addImage(id, png(), true);
@@ -178,7 +183,7 @@ class RoomServiceImplTest {
 	@Test
 	void deleteImageKeepsAtLeastFourGalleryImages() {
 		UUID id = UUID.randomUUID();
-		Room room = room(id, 4);
+		RoomType room = room(id, 4);
 		when(repository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(room));
 
 		ApiException ex = assertThrows(ApiException.class, () -> service.deleteImage(id, room.getImages().get(1).getId()));
@@ -189,15 +194,30 @@ class RoomServiceImplTest {
 	@Test
 	void reorderRequiresEveryGalleryImage() {
 		UUID id = UUID.randomUUID();
-		Room room = room(id, 4);
+		RoomType room = room(id, 4);
 		when(repository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(room));
-		List<UUID> galleryIds = room.getImages().stream().skip(1).map(RoomImage::getId).toList();
+		List<UUID> galleryIds = room.getImages().stream().skip(1).map(RoomTypeImage::getId).toList();
 
 		RoomResponse response = service.reorderImages(id, new ReorderRoomImagesRequest(galleryIds.reversed()));
 
 		assertEquals(galleryIds.reversed(), response.gallery().stream().map(image -> image.id()).toList());
 		assertThrows(ApiException.class,
 				() -> service.reorderImages(id, new ReorderRoomImagesRequest(galleryIds.subList(0, 3))));
+	}
+
+	@Test
+	void updateReusesExistingAmenitiesAndDropsCaseInsensitiveDuplicates() {
+		UUID id = UUID.randomUUID();
+		when(repository.findByIdAndDeletedAtIsNull(id)).thenReturn(Optional.of(room(id, 4)));
+		Amenity shower = amenity("Shower");
+		when(amenityRepository.findByNameIgnoreCase("shower")).thenReturn(Optional.of(shower));
+		RoomRequest request = new RoomRequest("Deluxe", BedType.DOUBLE, 32, 2, new BigDecimal("3000.00"), null,
+				"Nice room", List.of(" shower ", "Lamp", "LAMP"));
+
+		RoomResponse response = service.update(id, request);
+
+		assertEquals(List.of("Shower", "Lamp"), response.amenities());
+		verify(amenityRepository, times(1)).save(any(Amenity.class));
 	}
 
 	private static RoomRequest request(String name, BigDecimal promotionPrice) {
@@ -217,19 +237,25 @@ class RoomServiceImplTest {
 	}
 
 	/** A saved room with a main image followed by {@code galleryCount} gallery images. */
-	private static Room room(UUID id, int galleryCount) {
-		Room room = new Room();
+	private static Amenity amenity(String name) {
+		Amenity amenity = new Amenity();
+		amenity.setName(name);
+		return amenity;
+	}
+
+	private static RoomType room(UUID id, int galleryCount) {
+		RoomType room = new RoomType();
 		room.setId(id);
 		room.setName("Deluxe");
 		room.setBedType(BedType.DOUBLE);
 		room.setSizeSqm(32);
 		room.setPricePerNight(new BigDecimal("3000.00"));
 		room.setDescription("Nice room");
-		room.setAmenities(new ArrayList<>(List.of("Shower")));
+		room.getAmenities().add(amenity("Shower"));
 		for (int i = 0; i <= galleryCount; i++) {
-			RoomImage image = new RoomImage();
+			RoomTypeImage image = new RoomTypeImage();
 			image.setId(UUID.randomUUID());
-			image.setRoom(room);
+			image.setRoomType(room);
 			image.setIsMain(i == 0);
 			image.setSortOrder(i);
 			image.setStoragePath("rooms/" + id + "/" + i + ".png");

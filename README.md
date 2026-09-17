@@ -69,14 +69,15 @@ cd server
 
 The six room types from Figma live in `server/seed/rooms.json`, with images in `server/seed/rooms/`.
 
-- **supabase:** run `db/005_rooms.sql`, `db/006_storage_room_images.sql`, and `db/007_rename_rooms_to_room_types.sql` once (007 is only needed if the table is still named `rooms`). Start the server with `.\run-supabase.ps1`, then in another terminal:
+- **supabase:** run `db/005_rooms.sql`, `db/006_storage_room_images.sql`, `db/007_rename_rooms_to_room_types.sql` and `db/008_room_cleanup_and_amenities.sql` once, in order (all are safe to re-run). Start the server with `.\run-supabase.ps1`, then in another terminal:
 
   ```powershell
   cd server
   .\seed-rooms.ps1                                  # or -ApiBase http://localhost:8081/api
   ```
 
-  It creates each room through `POST /api/rooms`, so rows, `room_images` and bucket objects match real uploads. Rooms whose name already exists are skipped, so it's safe to re-run. macOS/Linux: `pwsh ./seed-rooms.ps1`.
+  It creates each room through `POST /api/rooms`, so rows, `room_type_images` and bucket objects match real uploads. Rooms whose name already exists are skipped, so it's safe to re-run. macOS/Linux: `pwsh ./seed-rooms.ps1`.
+  Then run `db/009_room_statuses_and_units.sql` (housekeeping statuses and the 40 room units, matched by room type name) and `db/010_bookings.sql` (bookings, double-booking guard, occupancy view).
 - **local (H2):** nothing to run. The same six rooms (without images) are seeded on startup from `db/local_rooms_seed.sql`. Running the script there just skips them.
 
 ## Design system
