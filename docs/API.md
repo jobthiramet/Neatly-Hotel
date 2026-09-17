@@ -98,12 +98,12 @@ Write endpoints are open until admin auth is wired (`TODO(auth)`).
 | --- | --- | --- | --- |
 | `name` | string | yes | Room type. Not blank, โค 120, unique among non-deleted rooms (case-insensitive, `409`) |
 | `bedType` | enum | yes | `SINGLE`, `DOUBLE`, `KING` (double bed, king size), `TWIN` |
-| `sizeSqm` | integer | yes | 1โ€“10000 |
-| `capacity` | integer | yes | Guests, 2โ€“6 |
+| `sizeSqm` | integer | yes | 1–10000 |
+| `capacity` | integer | yes | Guests, 2–6 |
 | `pricePerNight` | number | yes | > 0, โค 2 decimals |
 | `promotionPrice` | number \| null | no | > 0, โค 2 decimals, lower than `pricePerNight` (field error `promotionPriceValid`) |
 | `description` | string | yes | Not blank, โค 5000 |
-| `amenities` | string[] | yes | 1โ€“50 items, each not blank and โค 120. Order is display order. Trimmed; case-insensitive duplicates are dropped |
+| `amenities` | string[] | yes | 1–50 items, each not blank and โค 120. Order is display order. Trimmed; case-insensitive duplicates are dropped |
 
 `RoomResponse`:
 
@@ -128,7 +128,7 @@ Write endpoints are open until admin auth is wired (`TODO(auth)`).
 
 `PageResponse<T>`: `content` (T[]), `page` (zero-based), `size`, `totalElements`, `totalPages`.
 
-**Image rules:** PNG, JPEG or WEBP only (checked by content type and magic bytes; no SVG), max 5 MB each, one main image plus 4โ€“12 gallery images per room. Objects are stored in the public `room-images` bucket at `rooms/<roomId>/<uuid>.<ext>`; the client filename is never used. Removed or replaced images are deleted from storage after the database update (failures are logged, not returned).
+**Image rules:** PNG, JPEG or WEBP only (checked by content type and magic bytes; no SVG), max 5 MB each, one main image plus 4–12 gallery images per room. Objects are stored in the public `room-images` bucket at `rooms/<roomId>/<uuid>.<ext>`; the client filename is never used. Removed or replaced images are deleted from storage after the database update (failures are logged, not returned).
 
 #### `GET /api/rooms`
 
@@ -141,7 +141,7 @@ List non-deleted rooms, newest first.
 | --- | --- | --- |
 | `search` | `""` | Case-insensitive substring of room type (`name`) or bed type |
 | `page` | `0` | Zero-based; negative is treated as `0` |
-| `size` | `10` | Clamped to 1โ€“50 |
+| `size` | `10` | Clamped to 1–50 |
 
 - Response `200`:
 
@@ -194,7 +194,7 @@ Create a room with its images in one request. If any upload or the database writ
 | --- | --- | --- |
 | `room` | `application/json` `RoomRequest` | yes |
 | `mainImage` | file | yes |
-| `gallery` | file, repeated 4โ€“12 times | yes |
+| `gallery` | file, repeated 4–12 times | yes |
 
 - Response `201`: `ApiResponse<RoomResponse>` with `message: "Room created"`
 - Errors: `400` validation failed / invalid image / wrong gallery count / malformed JSON; `409` room type already exists; `413` image too large; `502` storage failure; `503` storage not configured (always on the `local` profile)
@@ -242,6 +242,77 @@ Reorder the gallery.
 - Body (`application/json`): `{ "imageIds": [UUID, ...] }`, every gallery image id exactly once, in the new order
 - Response `200`: `ApiResponse<RoomResponse>` with `message: "Room images reordered"`
 - Errors: `400` ids don't match the gallery; `404`
+
+### Room units
+
+Admin Room Management (physical rooms). Separate from `/api/rooms` (room types / Room & Property). Units are **soft deleted**: `DELETE` sets `deletedAt`. Occupancy for badges is reserved (`occupied` is currently always `false` until booking wiring); `displayStatus` combines Vacant/Occupied with the housekeeping label, except `ASSIGN_*` and `OUT_OF_*` which show the label alone.
+
+Write endpoints are open until admin auth is wired (`TODO(auth)`).
+
+`RoomUnitRequest`:
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `roomNumber` | string | yes | exactly 4 digits (`^[0-9]{4}$`), unique |
+| `roomTypeId` | UUID | yes | must reference a non-deleted room type |
+| `statusCode` | string | yes | must match a `room_statuses.code` (case-insensitive) |
+
+`RoomUnitResponse`:
+
+| Field | Type |
+| --- | --- |
+| `id` | UUID |
+| `roomNumber` | string |
+| `floor` | integer (derived from room number: 0001–0010 → 1, …) |
+| `roomTypeId` | UUID |
+| `roomTypeName` | string |
+| `bedType` | enum (`SINGLE`, `DOUBLE`, `KING`, `TWIN`) |
+| `statusCode` | string |
+| `statusLabel` | string |
+| `occupied` | boolean |
+| `displayStatus` | string (badge label) |
+
+#### `GET /api/room-units`
+
+List non-deleted units, sorted by `roomNumber`.
+
+- Auth: none (TODO admin)
+- Response `200`: `ApiResponse<RoomUnitResponse[]>`
+
+#### `GET /api/room-units/statuses`
+
+List housekeeping statuses ordered by `sortOrder`.
+
+- Auth: none
+- Response `200`: `ApiResponse<{ id, code, label, sortOrder }[]>`
+
+#### `GET /api/room-units/{id}`
+
+- Auth: none (TODO admin)
+- Response `200`: `ApiResponse<RoomUnitResponse>`
+- Errors: `404`
+
+#### `POST /api/room-units`
+
+- Auth: none (TODO admin)
+- Body: `RoomUnitRequest`
+- Response `201`: `ApiResponse<RoomUnitResponse>` with `message: "Room unit created"`
+- Errors: `400` validation / invalid status; `404` room type; `409` duplicate room number
+
+#### `PUT /api/room-units/{id}`
+
+- Auth: none (TODO admin)
+- Body: `RoomUnitRequest`
+- Response `200`: `ApiResponse<RoomUnitResponse>` with `message: "Room unit updated"`
+- Errors: `400`; `404`; `409`
+
+#### `DELETE /api/room-units/{id}`
+
+Soft-delete a unit.
+
+- Auth: none (TODO admin)
+- Response `204`: empty body
+- Errors: `404`
 
 ### Hotel information
 
@@ -298,11 +369,7 @@ Update name and description. Values are trimmed before saving.
 ```
 
 - Response `200`: `ApiResponse<HotelInfoResponse>` with `message: "Hotel information updated"`
-<<<<<<< HEAD
-- Errors: `401` missing/invalid Clerk token; `403` missing profile or non-agent role; `400` validation failed; `404` row missing; `500` malformed JSON
-=======
-- Errors: `400` validation failed; `404` row missing; `400` malformed JSON
->>>>>>> 07d44cc (feat(server)!: add paginated room crud with soft delete and images)
+- Errors: `401` missing/invalid Clerk token; `403` missing profile or non-agent role; `400` validation failed; `404` row missing; `400` malformed JSON
 
 #### `PUT /api/hotel/logo`
 
@@ -366,7 +433,7 @@ Create a profile for the signed-in user. The server reads `clerkUserId` from the
 | --- | --- | --- | --- |
 | `firstName` | string | yes | not blank; max 100 chars |
 | `lastName` | string | yes | not blank; max 100 chars |
-| `phoneNumber` | string | yes | E.164 format (`+` and 8โ€“15 digits) |
+| `phoneNumber` | string | yes | E.164 format (`+` and 8–15 digits) |
 | `dateOfBirth` | date | yes | must be in the past and the user must be at least 18 years old |
 | `country` | string | yes | not blank; max 100 chars |
 | `profilePicture` | string | no | max 500 chars |
@@ -404,25 +471,24 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-17
 
+- Added `GET/POST/PUT/DELETE /api/room-units` and `GET /api/room-units/statuses` for Admin Room Management (physical rooms on `room_units` / `room_statuses`).
+- Fixed leftover merge conflict markers in this file (hotel PUT errors + 2026-09-16 changelog).
 - Room amenities are now stored in a shared `amenities` table. Request and response shapes are unchanged; `amenities` in `RoomRequest` is trimmed and case-insensitive duplicates are dropped (first spelling kept), and an existing amenity name is reused with its stored spelling.
 
 ### 2026-09-16
 
-<<<<<<< HEAD
 - **BREAKING:** `PUT /api/hotel` and `PUT /api/hotel/logo` now require a verified Clerk session token and an `agent` database profile. Guests receive `401`; missing profiles and non-agent accounts receive `403`. Public hotel reads remain available.
 - Admin client now sends the Clerk session token when saving hotel information and uploading a logo.
-=======
 - `GET /api/rooms` is rate limited to 60 requests per minute per client IP and returns `429` with `Retry-After` when exceeded.
 - Documented the default page size (10) and that an out-of-range `page` returns an empty page.
 
 ### 2026-09-15
 
 - **BREAKING:** `GET /api/rooms` now returns `PageResponse<RoomSummaryResponse>` (with `search`, `page`, `size`) instead of a `RoomResponse[]`, and excludes soft-deleted rooms.
-- **BREAKING:** `POST /api/rooms` is now `multipart/form-data` (`room` JSON + `mainImage` + 4โ€“12 `gallery` files). `CreateRoomRequest` is replaced by `RoomRequest`.
+- **BREAKING:** `POST /api/rooms` is now `multipart/form-data` (`room` JSON + `mainImage` + 4–12 `gallery` files). `CreateRoomRequest` is replaced by `RoomRequest`.
 - **BREAKING:** `RoomResponse` drops `type` and `active`; adds `bedType`, `sizeSqm`, `promotionPrice`, `description`, `amenities`, `mainImage`, `gallery`, `createdAt`, `updatedAt`. `pricePerNight` must now be > 0.
 - Added `PUT /api/rooms/{id}`, soft `DELETE /api/rooms/{id}`, `POST /api/rooms/{id}/images`, `DELETE /api/rooms/{id}/images/{imageId}` and `PUT /api/rooms/{id}/images/order`.
 - Malformed JSON bodies and invalid UUID/number params now return `400` instead of `500` (all endpoints).
->>>>>>> 07d44cc (feat(server)!: add paginated room crud with soft delete and images)
 
 ### 2026-09-14
 

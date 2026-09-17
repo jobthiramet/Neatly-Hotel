@@ -15,48 +15,43 @@ import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiErrorMessage } from '@/stores/hotel'
-import { useRoomsStore } from '@/stores/rooms'
+import { useRoomUnitsStore } from '@/stores/roomUnits'
+import { BED_TYPE_LABELS, useRoomsStore } from '@/stores/rooms'
 
 const PAGE_SIZE = 10
 
-const ROOM_TYPE_OPTIONS = [
-  'Superior Garden View',
-  'Deluxe',
-  'Superior',
-  'Premier Sea View',
-  'Supreme',
-  'Suit',
-] as const
-
-const BED_TYPE_OPTIONS = ['Single Bed', 'Double Bed', 'King Bed'] as const
-
-const STATUS_OPTIONS = Object.keys(roomStatusTone) as RoomStatus[]
-
+const roomUnitsStore = useRoomUnitsStore()
 const roomsStore = useRoomsStore()
 
 const search = ref('')
 const page = ref(1)
 const createOpen = ref(false)
 const saving = ref(false)
+const roomTypes = ref<{ id: string, name: string, bedType: keyof typeof BED_TYPE_LABELS }[]>([])
 
 const form = reactive({
   roomNumber: '',
-  roomType: '' as string,
-  bedType: '' as string,
-  status: 'Vacant Clean' as string,
+  roomTypeId: '' as string,
+  statusCode: '' as string,
 })
 
 const errors = reactive<Partial<Record<keyof typeof form, string>>>({})
 
+const selectedBedTypeLabel = computed(() => {
+  const type = roomTypes.value.find(t => t.id === form.roomTypeId)
+  return type ? BED_TYPE_LABELS[type.bedType] : ''
+})
+
 const filteredRooms = computed(() => {
   const q = search.value.trim().toLowerCase()
   if (!q)
-    return roomsStore.sortedRooms
-  return roomsStore.sortedRooms.filter(room =>
+    return roomUnitsStore.sortedUnits
+  return roomUnitsStore.sortedUnits.filter(room =>
     room.roomNumber.toLowerCase().includes(q)
-    || room.roomType.toLowerCase().includes(q)
-    || room.bedType.toLowerCase().includes(q)
-    || room.status.toLowerCase().includes(q),
+    || room.roomTypeName.toLowerCase().includes(q)
+    || BED_TYPE_LABELS[room.bedType].toLowerCase().includes(q)
+    || room.displayStatus.toLowerCase().includes(q)
+    || room.statusLabel.toLowerCase().includes(q),
   )
 })
 
@@ -88,22 +83,29 @@ watch(filteredRooms, () => {
 
 onMounted(async () => {
   try {
-    await roomsStore.fetchAll()
+    const [typesPage] = await Promise.all([
+      roomsStore.list({ search: '', page: 0, size: 50 }),
+      roomUnitsStore.fetchStatuses(),
+      roomUnitsStore.fetchAll(),
+    ])
+    roomTypes.value = typesPage.content.map(t => ({
+      id: t.id,
+      name: t.name,
+      bedType: t.bedType,
+    }))
   }
-  catch {
-    toast.error(roomsStore.error ?? 'Could not load rooms.')
+  catch (e) {
+    toast.error(apiErrorMessage(e, roomUnitsStore.error ?? 'Could not load rooms.'))
   }
 })
 
 function resetForm() {
   form.roomNumber = ''
-  form.roomType = ''
-  form.bedType = ''
-  form.status = 'Vacant Clean'
+  form.roomTypeId = ''
+  form.statusCode = roomUnitsStore.statuses.find(s => s.code === 'CLEAN')?.code ?? ''
   errors.roomNumber = undefined
-  errors.roomType = undefined
-  errors.bedType = undefined
-  errors.status = undefined
+  errors.roomTypeId = undefined
+  errors.statusCode = undefined
 }
 
 function openCreate() {
@@ -111,12 +113,17 @@ function openCreate() {
   createOpen.value = true
 }
 
+function onRoomNumberInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  form.roomNumber = input.value.replace(/\D/g, '').slice(0, 4)
+}
+
 function validate() {
-  errors.roomNumber = form.roomNumber.trim() ? undefined : 'Room number is required.'
-  errors.roomType = form.roomType.trim() ? undefined : 'Room type is required.'
-  errors.bedType = form.bedType.trim() ? undefined : 'Bed type is required.'
-  errors.status = form.status.trim() ? undefined : 'Status is required.'
-  return !errors.roomNumber && !errors.roomType && !errors.bedType && !errors.status
+  const number = form.roomNumber.trim()
+  errors.roomNumber = /^\d{4}$/.test(number) ? undefined : 'Room number must be exactly 4 digits.'
+  errors.roomTypeId = form.roomTypeId ? undefined : 'Room type is required.'
+  errors.statusCode = form.statusCode ? undefined : 'Status is required.'
+  return !errors.roomNumber && !errors.roomTypeId && !errors.statusCode
 }
 
 async function submitCreate() {
@@ -124,11 +131,10 @@ async function submitCreate() {
     return
   saving.value = true
   try {
-    await roomsStore.create({
+    await roomUnitsStore.create({
       roomNumber: form.roomNumber.trim(),
-      roomType: form.roomType.trim(),
-      bedType: form.bedType.trim(),
-      status: form.status.trim(),
+      roomTypeId: form.roomTypeId,
+      statusCode: form.statusCode,
     })
     createOpen.value = false
     resetForm()
@@ -185,7 +191,7 @@ function isRoomStatus(value: string): value is RoomStatus {
   </Teleport>
 
   <div
-    v-if="roomsStore.loading"
+    v-if="roomUnitsStore.loading"
     role="status"
     class="rounded-sm bg-white px-6 py-10 text-body1 text-gray-700"
   >
@@ -193,11 +199,11 @@ function isRoomStatus(value: string): value is RoomStatus {
   </div>
 
   <div
-    v-else-if="roomsStore.error"
+    v-else-if="roomUnitsStore.error"
     role="alert"
     class="rounded-sm bg-white px-6 py-10 text-body1 text-red"
   >
-    {{ roomsStore.error }}
+    {{ roomUnitsStore.error }}
   </div>
 
   <div v-else class="overflow-hidden rounded-sm bg-white shadow-md">
@@ -234,15 +240,15 @@ function isRoomStatus(value: string): value is RoomStatus {
               {{ room.roomNumber }}
             </td>
             <td class="px-6 py-4">
-              {{ room.roomType }}
+              {{ room.roomTypeName }}
             </td>
             <td class="px-6 py-4">
-              {{ room.bedType }}
+              {{ BED_TYPE_LABELS[room.bedType] }}
             </td>
             <td class="px-6 py-4">
-              <Badge v-if="isRoomStatus(room.status)" :status="room.status" />
+              <Badge v-if="isRoomStatus(room.displayStatus)" :status="room.displayStatus" />
               <Badge v-else tone="neutral">
-                {{ room.status }}
+                {{ room.displayStatus }}
               </Badge>
             </td>
           </tr>
@@ -299,47 +305,50 @@ function isRoomStatus(value: string): value is RoomStatus {
         <FormField label="Room no." for="room-number" :error="errors.roomNumber">
           <Input
             id="room-number"
-            v-model="form.roomNumber"
+            :model-value="form.roomNumber"
+            inputmode="numeric"
+            maxlength="4"
             placeholder="0001"
             :aria-invalid="!!errors.roomNumber"
             required
+            @input="onRoomNumberInput"
           />
         </FormField>
 
-        <FormField label="Room type" for="room-type" :error="errors.roomType">
-          <Select v-model="form.roomType">
-            <SelectTrigger id="room-type" :aria-invalid="!!errors.roomType">
+        <FormField label="Room type" for="room-type" :error="errors.roomTypeId">
+          <Select v-model="form.roomTypeId">
+            <SelectTrigger id="room-type" :aria-invalid="!!errors.roomTypeId">
               <SelectValue placeholder="Select room type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem v-for="option in ROOM_TYPE_OPTIONS" :key="option" :value="option">
-                {{ option }}
+              <SelectItem v-for="option in roomTypes" :key="option.id" :value="option.id">
+                {{ option.name }}
               </SelectItem>
             </SelectContent>
           </Select>
         </FormField>
 
-        <FormField label="Bed type" for="bed-type" :error="errors.bedType">
-          <Select v-model="form.bedType">
-            <SelectTrigger id="bed-type" :aria-invalid="!!errors.bedType">
-              <SelectValue placeholder="Select bed type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="option in BED_TYPE_OPTIONS" :key="option" :value="option">
-                {{ option }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+        <FormField label="Bed type" for="bed-type">
+          <Input
+            id="bed-type"
+            :model-value="selectedBedTypeLabel || 'Select a room type first'"
+            readonly
+            disabled
+          />
         </FormField>
 
-        <FormField label="Status" for="room-status" :error="errors.status">
-          <Select v-model="form.status">
-            <SelectTrigger id="room-status" :aria-invalid="!!errors.status">
+        <FormField label="Status" for="room-status" :error="errors.statusCode">
+          <Select v-model="form.statusCode">
+            <SelectTrigger id="room-status" :aria-invalid="!!errors.statusCode">
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem v-for="option in STATUS_OPTIONS" :key="option" :value="option">
-                {{ option }}
+              <SelectItem
+                v-for="option in roomUnitsStore.statuses"
+                :key="option.code"
+                :value="option.code"
+              >
+                {{ option.label }}
               </SelectItem>
             </SelectContent>
           </Select>
