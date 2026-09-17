@@ -19,17 +19,24 @@ import org.springframework.data.domain.Sort;
 import com.neatly.hotel.model.BedType;
 import com.neatly.hotel.model.Room;
 
+import jakarta.persistence.EntityManager;
+
 @DataJpaTest
 class RoomRepositoryTest {
 
 	@Autowired
 	private RoomRepository repository;
 
+	@Autowired
+	private EntityManager entityManager;
+
 	private Room deleted;
 
 	@BeforeEach
 	void setUp() {
-		repository.deleteAll(); // the local profile seeds sample rooms
+		// the local profile seeds sample rooms and room units that reference them
+		entityManager.createNativeQuery("delete from room_units").executeUpdate();
+		repository.deleteAll();
 		repository.save(room("Superior Garden View", BedType.DOUBLE, null));
 		repository.save(room("Deluxe", BedType.KING, null));
 		repository.save(room("Suite", BedType.TWIN, null));
