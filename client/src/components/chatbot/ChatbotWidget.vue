@@ -2,18 +2,48 @@
 <script setup lang="ts">
 import { onKeyStroke } from '@vueuse/core'
 import { nextTick, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import { IconChat, IconClose } from '@/components/icons'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { chatbotGreeting, chatbotTopics } from '@/data/chatbot'
+import { chatbotGreeting, chatbotTopics, type ChatbotPaymentOption, type ChatbotTopic } from '@/data/chatbot'
+import { roomDetails } from '@/data/rooms'
+import { cn } from '@/lib/utils'
 
+type ChatMessage
+  = { id: number, role: 'user', text: string }
+  | { id: number, role: 'bot', kind: 'message', text: string }
+  | { id: number, role: 'bot', kind: 'room-type', title: string, actionLabel: string }
+  | { id: number, role: 'bot', kind: 'option-with-details', title: string, options: ChatbotPaymentOption[] }
+
+const route = useRoute()
 const open = ref(false)
 const draft = ref('')
+const messages = ref<ChatMessage[]>([])
+let nextMessageId = 1
+const rooms = Object.values(roomDetails)
 const fabButton = useTemplateRef<HTMLButtonElement>('fabButton')
 const closeButton = useTemplateRef<HTMLButtonElement>('closeButton')
+const logRegion = useTemplateRef<HTMLElement>('logRegion')
+
+function formatPrice(amount: number) {
+  return 'THB ' + amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function scrollToLatest() {
+  void nextTick(() => {
+    const log = logRegion.value
+    if (log) log.scrollTop = log.scrollHeight
+  })
+}
 
 function openPanel() {
   open.value = true
   void nextTick(() => closeButton.value?.focus())
+  scrollToLatest()
 }
 
 function closePanel() {
@@ -24,13 +54,48 @@ function closePanel() {
 }
 
 function handleSubmit() {
-  // Round 1: the composer is visual only. Sending is a later round.
+  // Round 2: the composer is still visual only. Sending is round 3.
+}
+
+function selectTopic(topic: ChatbotTopic) {
+  if (!topic.enabled) return
+
+  messages.value.push({ id: nextMessageId++, role: 'user', text: topic.label })
+
+  if (topic.format === 'message') {
+    messages.value.push({ id: nextMessageId++, role: 'bot', kind: 'message', text: topic.text })
+  }
+  else if (topic.format === 'room-type') {
+    messages.value.push({
+      id: nextMessageId++,
+      role: 'bot',
+      kind: 'room-type',
+      title: topic.title,
+      actionLabel: topic.actionLabel,
+    })
+  }
+  else {
+    messages.value.push({
+      id: nextMessageId++,
+      role: 'bot',
+      kind: 'option-with-details',
+      title: topic.title,
+      options: topic.options,
+    })
+  }
+
+  scrollToLatest()
 }
 
 onKeyStroke('Escape', closePanel)
 
 watch(open, (isOpen) => {
   document.body.style.overflow = isOpen ? 'hidden' : ''
+})
+
+watch(() => route.fullPath, () => {
+  messages.value = []
+  draft.value = ''
 })
 
 onUnmounted(() => {
@@ -68,7 +133,7 @@ onUnmounted(() => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="chatbot-title"
-        class="fixed inset-x-0 top-12 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-sm bg-white shadow-md lg:top-6 lg:right-6 lg:bottom-6 lg:left-auto lg:w-93.75 lg:rounded-sm"
+        class="fixed inset-x-0 top-12 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-sm bg-white shadow-md lg:top-6 lg:right-6 lg:bottom-6 lg:left-auto lg:w-187.5 lg:rounded-sm"
       >
         <header class="flex items-center justify-between bg-white pl-4">
           <div class="flex min-w-0 flex-1 items-center gap-2">
@@ -90,17 +155,104 @@ onUnmounted(() => {
           </button>
         </header>
 
-        <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-bg px-4 py-6">
-          <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+        <div
+          ref="logRegion"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-bg px-4 py-6"
+        >
+          <p class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700">
             {{ chatbotGreeting }}
           </p>
+
+          <article
+            v-for="message in messages"
+            :key="message.id"
+            class="flex flex-col gap-2"
+          >
+            <p
+              v-if="message.role === 'user'"
+              class="ml-auto max-w-63.75 lg:max-w-150 rounded-sm bg-orange-500 px-4 py-2 text-body1 text-white"
+            >
+              {{ message.text }}
+            </p>
+
+            <p
+              v-else-if="message.kind === 'message'"
+              class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700"
+            >
+              {{ message.text }}
+            </p>
+
+            <template v-else-if="message.kind === 'room-type'">
+              <p class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+                {{ message.title }}
+              </p>
+              <ul class="flex flex-col gap-3">
+                <li
+                  v-for="room in rooms"
+                  :key="`${message.id}-${room.id}`"
+                  class="overflow-hidden rounded-sm bg-white shadow-md"
+                >
+                  <img
+                    :src="room.gallery[0]?.src"
+                    :alt="room.gallery[0]?.alt ?? room.name"
+                    width="375"
+                    height="200"
+                    class="h-40 w-full object-cover"
+                  >
+                  <div class="flex flex-col gap-3 px-4 py-3">
+                    <h3 class="text-h5 text-gray-900">
+                      {{ room.name }}
+                    </h3>
+                    <p class="text-body1 text-gray-700">
+                      {{ formatPrice(room.currentPrice) }}
+                    </p>
+                    <Button as-child class="w-full">
+                      <RouterLink :to="{ name: 'room-detail', params: { roomId: room.id } }">
+                        {{ message.actionLabel }}
+                      </RouterLink>
+                    </Button>
+                  </div>
+                </li>
+              </ul>
+            </template>
+
+            <template v-else>
+              <p class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+                {{ message.title }}
+              </p>
+              <ul class="flex flex-col gap-2">
+                <li v-for="option in message.options" :key="`${message.id}-${option.label}`">
+                  <details class="rounded-sm bg-white px-4 py-2">
+                    <summary class="cursor-pointer text-body1 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring">
+                      {{ option.label }}
+                    </summary>
+                    <p class="mt-2 text-body1 text-gray-700">
+                      {{ option.detail }}
+                    </p>
+                  </details>
+                </li>
+              </ul>
+            </template>
+          </article>
+
           <ul class="flex flex-wrap gap-2" aria-label="Suggested topics">
-            <li v-for="topic in chatbotTopics" :key="topic">
+            <li v-for="topic in chatbotTopics" :key="topic.id">
               <button
                 type="button"
-                class="rounded-full border border-green-400 bg-green-200 px-4 py-2 text-body1 text-green-700 outline-none is-hover:bg-green-300 is-focus:ring-2 is-focus:ring-ring"
+                :disabled="!topic.enabled"
+                :aria-disabled="!topic.enabled"
+                :class="cn(
+                  'rounded-full border px-4 py-2 text-body1 outline-none',
+                  topic.enabled
+                    ? 'border-green-400 bg-green-200 text-green-700 is-hover:bg-green-300 is-focus:ring-2 is-focus:ring-ring'
+                    : 'cursor-not-allowed border-gray-400 bg-gray-200 text-gray-600',
+                )"
+                @click="selectTopic(topic)"
               >
-                {{ topic }}
+                {{ topic.label }}
               </button>
             </li>
           </ul>
