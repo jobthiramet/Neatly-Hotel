@@ -77,7 +77,7 @@ The six room types from Figma live in `server/seed/rooms.json`, with images in `
   ```
 
   It creates each room through `POST /api/rooms`, so rows, `room_type_images` and bucket objects match real uploads. Rooms whose name already exists are skipped, so it's safe to re-run. macOS/Linux: `pwsh ./seed-rooms.ps1`.
-  Then run `db/009_room_statuses_and_units.sql` (housekeeping statuses and the 40 room units, matched by room type name), `db/010_bookings.sql` (bookings, double-booking guard, occupancy view), and `db/011_bookings_checkout.sql` (checkout columns, payments, promo codes).
+  Then run `db/009_room_statuses_and_units.sql` (housekeeping statuses and the 40 room units, matched by room type name), `db/010_bookings.sql` (bookings, double-booking guard, occupancy view), `db/011_bookings_checkout.sql` (checkout columns, payments, promo codes), and `db/012_drop_legacy_booking_columns.sql` (drops leftover `bookings.room_type_id` / `rooms_count` / `grand_total` from the old checkout table).
 - **local (H2):** nothing to run. The same six rooms (without images) are seeded on startup from `db/local_rooms_seed.sql`. Running the script there just skips them.
 
 ## Design system

@@ -556,6 +556,7 @@ Newest first. Mark breaking changes with **BREAKING**.
 - Added authenticated guest checkout: `POST /api/bookings`, `GET /api/bookings`, `GET /api/bookings/{id}`, `POST /api/bookings/{id}/payment-session`.
 - Added public `POST /api/stripe/webhooks` (Checkout Session completed/expired). Card checkout uses Stripe Checkout `ui_mode: elements`; cash confirms immediately as unpaid pay-at-hotel.
 - Bookings now share `dev`'s `booking_rooms` inventory model: checkout writes one unassigned room row per requested unit; Stripe/cash columns live in `011_bookings_checkout.sql`.
+- Drop leftover `bookings.room_type_id` / `rooms_count` / `grand_total` from the old feat/payment checkout table (`012_drop_legacy_booking_columns.sql`). Card checkout was returning 500 because Postgres still required `room_type_id`.
 
 ### 2026-09-16
 
