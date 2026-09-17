@@ -1,5 +1,6 @@
 <!-- Figma: user > room detail (102:2788 desktop) & mobile > user > room detail -->
 <script setup lang="ts">
+import { getLocalTimeZone, today } from '@internationalized/date'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget.vue'
@@ -45,8 +46,16 @@ function formatPrice(amount: number) {
 }
 
 function handleBookNow() {
-  // Navigate to booking process or home search
-  router.push({ path: '/', hash: '#rooms' })
+  const checkIn = today(getLocalTimeZone())
+  router.push({
+    name: 'booking',
+    query: {
+      roomId: activeRoomId.value,
+      checkIn: checkIn.toString(),
+      checkOut: checkIn.add({ days: 1 }).toString(),
+      guests: '2',
+    },
+  })
 }
 </script>
 

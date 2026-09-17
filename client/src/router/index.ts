@@ -39,6 +39,12 @@ const router = createRouter({
       component: () => import('../views/RoomDetailView.vue'),
     },
     {
+      path: '/booking',
+      name: 'booking',
+      component: () => import('../views/BookingView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/room-detail',
       redirect: '/rooms/superior-garden-view',
     },
