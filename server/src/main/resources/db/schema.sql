@@ -1,4 +1,4 @@
--- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001–010.
+﻿-- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001โ€“010.
 -- Reference for reading the model. For setup, run the numbered files in order; they also create storage buckets,
 -- row level security, policies, triggers, views and seed data. Every statement below is safe to re-run.
 -- Keep this file in sync when a numbered migration changes a table.

@@ -28,3 +28,6 @@ export { default as IconCube } from './IconCube.vue'
 export { default as IconChartPie } from './IconChartPie.vue'
 export { default as IconChatText } from './IconChatText.vue'
 export { default as IconLogout } from './IconLogout.vue'
+
+export { default as IconEdit } from './IconEdit.vue'
+export { default as IconTrash } from './IconTrash.vue'
