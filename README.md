@@ -57,7 +57,7 @@ cd server
 
 ### 3. Server with Supabase PostgreSQL
 
-1. Create `rooms` table: run `server/src/main/resources/db/schema.sql` in Supabase **SQL Editor**
+1. Create `room_types` table: run `server/src/main/resources/db/schema.sql` in Supabase **SQL Editor**
 2. Copy `server/.env.example` ? `server/.env` and fill Database credentials (Session pooler, port **5432**)
 
 ```powershell
@@ -69,7 +69,7 @@ cd server
 
 The six room types from Figma live in `server/seed/rooms.json`, with images in `server/seed/rooms/`.
 
-- **supabase:** run `db/005_rooms.sql` and `db/006_storage_room_images.sql` once, start the server with `.\run-supabase.ps1`, then in another terminal:
+- **supabase:** run `db/005_rooms.sql`, `db/006_storage_room_images.sql`, and `db/007_rename_rooms_to_room_types.sql` once (007 is only needed if the table is still named `rooms`). Start the server with `.\run-supabase.ps1`, then in another terminal:
 
   ```powershell
   cd server
