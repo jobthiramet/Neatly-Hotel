@@ -45,6 +45,30 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/booking/success/:bookingId',
+      name: 'booking-success',
+      component: () => import('../views/BookingSuccessView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/booking/failed/:bookingId?',
+      name: 'booking-failed',
+      component: () => import('../views/BookingFailedView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/booking/complete',
+      name: 'booking-complete',
+      component: () => import('../views/BookingCompleteView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/booking/pay/:bookingId',
+      name: 'booking-pay',
+      component: () => import('../views/BookingPayView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/room-detail',
       redirect: '/rooms/superior-garden-view',
     },

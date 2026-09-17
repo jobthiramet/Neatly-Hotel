@@ -19,6 +19,7 @@
     "@clerk/vue": "^2.5.1",
     "@internationalized/date": "^3.12.4",
     "@lucide/vue": "^1.45.0",
+    "@stripe/stripe-js": "^9.16.0",
     "@supabase/supabase-js": "^2.116.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vueuse/core": "^14.4.0",

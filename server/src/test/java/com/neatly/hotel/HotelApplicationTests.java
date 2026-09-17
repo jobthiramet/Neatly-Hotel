@@ -112,6 +112,41 @@ class HotelApplicationTests {
 				.andExpect(jsonPath("$.paths['/api/hotel'].get.security").doesNotExist());
 	}
 
+	@Test
+	void bookingsRequireAuthentication() throws Exception {
+		mockMvc.perform(get("/api/bookings")).andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/api/bookings").contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void cashBookingCreatesConfirmedStay() throws Exception {
+		String body = """
+				{
+				  "roomTypeId": "00000000-0000-0000-0001-000000000001",
+				  "checkIn": "2026-10-19",
+				  "checkOut": "2026-10-20",
+				  "guests": 2,
+				  "firstName": "Kate",
+				  "lastName": "Cho",
+				  "email": "kate@example.com",
+				  "phoneNumber": "0812345678",
+				  "country": "Thailand",
+				  "dateOfBirth": "1990-01-15",
+				  "specialRequestCodes": ["airport-transfer"],
+				  "promotionCode": "NEATLYNEW400",
+				  "paymentMethod": "CASH"
+				}
+				""";
+		mockMvc.perform(post("/api/bookings").with(jwt().jwt(token -> token.subject("user_guest")))
+				.contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.data.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.data.paymentMethod").value("CASH"))
+				.andExpect(jsonPath("$.data.grandTotal").value(2300.0))
+				.andExpect(jsonPath("$.data.clientSecret").doesNotExist());
+	}
+
 	private ProfileResponse profile(String subject, String role) {
 		return new ProfileResponse(subject, null, null, null, null, null, null, role, null, null);
 	}

@@ -3,12 +3,14 @@
 import type { DateValue } from '@internationalized/date'
 import { getLocalTimeZone, parseDate, today } from '@internationalized/date'
 import { useAuth, useUser } from '@clerk/vue'
-import { useIntervalFn } from '@vueuse/core'
+import { useDebounceFn, useIntervalFn } from '@vueuse/core'
 import { parsePhoneNumberFromString } from 'libphonenumber-js'
 import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { isAxiosError } from 'axios'
 import { toast } from 'vue-sonner'
 import { api } from '@/api/client'
+import { createBooking, type CreateBookingRequest } from '@/api/bookings'
 import BookingBasicInfoStep from '@/components/booking/BookingBasicInfoStep.vue'
 import BookingDetailSidebar from '@/components/booking/BookingDetailSidebar.vue'
 import BookingPaymentStep from '@/components/booking/BookingPaymentStep.vue'
@@ -25,16 +27,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Stepper, StepperIndicator, StepperItem, StepperTitle, StepperTrigger } from '@/components/ui/stepper'
-import type { BasicInfoField, CheckoutPayment, GuestDetails, PaymentField } from '@/data/booking'
+import type { BasicInfoField, CheckoutPayment, GuestDetails } from '@/data/booking'
 import {
   BOOKING_HOLD_SECONDS,
   CHECKOUT_STEPS,
   nightsBetween,
   promotionDiscount,
   specialRequests,
+  standardRequests,
 } from '@/data/booking'
 import { countries } from '@/data/countries'
 import { defaultRoomId, roomDetails } from '@/data/rooms'
+import { useRoomsStore, type RoomResponse } from '@/stores/rooms'
 
 const DEFAULT_PHONE_COUNTRY = 'TH'
 
@@ -78,11 +82,19 @@ const guests = computed(() => {
   const value = Number(route.query.guests)
   return Number.isInteger(value) && value > 0 ? value : 2
 })
+const roomsStore = useRoomsStore()
+const apiRoom = ref<RoomResponse | null>(null)
+const roomLoadError = ref('')
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const roomId = computed(() => {
   const value = typeof route.query.roomId === 'string' ? route.query.roomId : ''
-  return roomDetails[value] ? value : defaultRoomId
+  return roomDetails[value] ? value : (UUID_RE.test(value) ? value : defaultRoomId)
 })
-const room = computed(() => roomDetails[roomId.value] ?? roomDetails[defaultRoomId]!)
+const mockRoom = computed(() => roomDetails[roomId.value] ?? roomDetails[defaultRoomId]!)
+const roomName = computed(() => apiRoom.value?.name ?? mockRoom.value.name)
+const roomPrice = computed(() => apiRoom.value?.promotionPrice ?? apiRoom.value?.pricePerNight ?? mockRoom.value.currentPrice)
+const roomTypeId = computed(() => apiRoom.value?.id ?? '')
 
 const step = ref(1)
 const guest = reactive<GuestDetails>({
@@ -103,6 +115,11 @@ const payment = reactive<CheckoutPayment>({
   cardOwner: '',
   promotionCode: '',
 })
+const paymentStep = ref<{ confirmCard: () => Promise<{ ok: boolean, message?: string }> } | null>(null)
+const clientSecret = ref<string | null>(null)
+const pendingBookingId = ref('')
+const stripeError = ref('')
+const submitting = ref(false)
 
 const basicFields: BasicInfoField[] = ['firstName', 'lastName', 'email', 'phoneNumber', 'dateOfBirth', 'country']
 const basicLabels: Record<BasicInfoField, string> = {
@@ -122,15 +139,6 @@ const basicErrors = reactive<Record<BasicInfoField, string>>({
   country: '',
 })
 
-const paymentFields: PaymentField[] = ['method', 'cardNumber', 'expiry', 'cvc', 'cardOwner']
-const paymentErrors = reactive<Record<PaymentField, string>>({
-  method: '',
-  cardNumber: '',
-  expiry: '',
-  cvc: '',
-  cardOwner: '',
-})
-
 const remainingSeconds = ref(BOOKING_HOLD_SECONDS)
 const expiredOpen = ref(false)
 
@@ -145,7 +153,7 @@ const { pause: pauseTimer } = useIntervalFn(() => {
 }, 1000)
 
 const nights = computed(() => Math.max(1, nightsBetween(checkIn.value, checkOut.value)))
-const roomAmount = computed(() => room.value.currentPrice * nights.value)
+const roomAmount = computed(() => roomPrice.value * nights.value)
 const extraItems = computed(() =>
   specialRequests
     .filter(item => selectedRequestIds.value.includes(item.id))
@@ -154,7 +162,7 @@ const extraItems = computed(() =>
 const promotionAmount = computed(() => promotionDiscount(payment.promotionCode))
 const lineItems = computed(() => {
   const items = [
-    { label: `${room.value.name} Room`, amount: roomAmount.value },
+    { label: `${roomName.value} Room`, amount: roomAmount.value },
     ...extraItems.value,
   ]
   if (promotionAmount.value)
@@ -177,8 +185,6 @@ watch(() => route.query.step, (value) => {
 }, { immediate: true })
 
 watch(step, (value) => {
-  if (value === 3 && !payment.cardOwner.trim())
-    payment.cardOwner = `${guest.firstName} ${guest.lastName}`.trim()
   if (String(route.query.step) === String(value))
     return
   router.replace({ query: { ...route.query, step: String(value) } })
@@ -225,81 +231,150 @@ function focusFirstBasicError() {
   document.getElementById(ids[first])?.focus()
 }
 
-function cardDigits() {
-  return payment.cardNumber.replace(/\D/g, '')
+function apiErrorMessage(error: unknown, fallback: string) {
+  if (isAxiosError(error)) {
+    const message = error.response?.data?.message
+    if (typeof message === 'string' && message.trim())
+      return message
+  }
+  return fallback
 }
 
-function validateExpiry(value: string) {
-  const match = /^(\d{2})\/(\d{2})$/.exec(value)
-  if (!match)
-    return 'Enter expiry as MM/YY.'
-  const month = Number(match[1])
-  const year = Number(match[2])
-  if (month < 1 || month > 12)
-    return 'Enter a valid month.'
-  const now = today(getLocalTimeZone())
-  const expiryYear = 2000 + year
-  if (expiryYear < now.year || (expiryYear === now.year && month < now.month))
-    return 'This card has expired.'
-  return ''
+async function resolveRoom() {
+  roomLoadError.value = ''
+  try {
+    const requested = typeof route.query.roomId === 'string' ? route.query.roomId : ''
+    if (UUID_RE.test(requested)) {
+      apiRoom.value = await roomsStore.get(requested)
+      return
+    }
+    const page = await roomsStore.list({ search: mockRoom.value.name, page: 0, size: 50 })
+    const match = page.content.find(item => item.name.toLowerCase() === mockRoom.value.name.toLowerCase())
+      ?? page.content[0]
+    if (!match)
+      throw new Error('Room not found')
+    apiRoom.value = await roomsStore.get(match.id)
+  }
+  catch {
+    roomLoadError.value = 'Could not load this room from the server.'
+    stripeError.value = roomLoadError.value
+  }
 }
 
-function validatePaymentField(field: PaymentField) {
-  if (field === 'method') {
-    paymentErrors.method = payment.method ? '' : 'Select a payment method.'
-    return
+function buildRequest(method: 'STRIPE' | 'CASH'): CreateBookingRequest {
+  const standardIds = new Set(standardRequests.map(item => item.id))
+  const specialIds = new Set(specialRequests.map(item => item.id))
+  return {
+    roomTypeId: roomTypeId.value,
+    checkIn: checkIn.value.toString(),
+    checkOut: checkOut.value.toString(),
+    guests: guests.value,
+    firstName: guest.firstName.trim(),
+    lastName: guest.lastName.trim(),
+    email: guest.email.trim(),
+    phoneNumber: guest.phoneNumber.trim(),
+    country: guest.country.trim(),
+    dateOfBirth: dateOfBirth.value!.toString(),
+    standardRequestCodes: selectedRequestIds.value.filter(id => standardIds.has(id)),
+    specialRequestCodes: selectedRequestIds.value.filter(id => specialIds.has(id)),
+    additionalRequest: additionalRequest.value.trim(),
+    promotionCode: payment.promotionCode.trim(),
+    paymentMethod: method,
   }
-  if (payment.method !== 'credit') {
-    paymentErrors[field] = ''
-    return
-  }
-  if (field === 'cardNumber') {
-    const digits = cardDigits()
-    paymentErrors.cardNumber = !digits
-      ? 'Card number is required.'
-      : digits.length < 13 || digits.length > 19
-        ? 'Enter a valid card number.'
-        : ''
-    return
-  }
-  if (field === 'expiry') {
-    paymentErrors.expiry = !payment.expiry ? 'Expiry date is required.' : validateExpiry(payment.expiry)
-    return
-  }
-  if (field === 'cvc') {
-    paymentErrors.cvc = !payment.cvc
-      ? 'CVC is required.'
-      : payment.cvc.length < 3
-        ? 'Enter a valid CVC.'
-        : ''
-    return
-  }
-  paymentErrors.cardOwner = payment.cardOwner.trim() ? '' : 'Card owner is required.'
 }
 
-function touchPaymentField(field: PaymentField) {
-  validatePaymentField(field)
-}
-
-function validatePayment() {
-  const fields: PaymentField[] = payment.method === 'credit' ? paymentFields : ['method']
-  fields.forEach(validatePaymentField)
-  return fields.every(field => !paymentErrors[field])
-}
-
-function focusFirstPaymentError() {
-  const first = paymentFields.find(field => paymentErrors[field])
-  if (!first)
+async function ensureStripeSession() {
+  if (step.value !== 3 || payment.method !== 'credit' || !roomTypeId.value || !dateOfBirth.value)
     return
-  if (first === 'method')
+  const token = await sessionToken()
+  if (!token)
     return
-  const ids: Record<Exclude<PaymentField, 'method'>, string> = {
-    cardNumber: 'card-number',
-    expiry: 'card-expiry',
-    cvc: 'card-cvc',
-    cardOwner: 'card-owner',
+  try {
+    stripeError.value = ''
+    const booking = await createBooking(token, buildRequest('STRIPE'))
+    pendingBookingId.value = booking.id
+    clientSecret.value = booking.clientSecret
   }
-  document.getElementById(ids[first])?.focus()
+  catch (error) {
+    clientSecret.value = null
+    stripeError.value = apiErrorMessage(error, 'Could not start card payment.')
+  }
+}
+
+const startStripeSession = useDebounceFn(ensureStripeSession, 400)
+
+watch(
+  () => [
+    step.value,
+    payment.method,
+    payment.promotionCode,
+    selectedRequestIds.value.join(','),
+    roomTypeId.value,
+    dateOfBirth.value?.toString() ?? '',
+  ] as const,
+  () => {
+    if (step.value === 3 && payment.method === 'credit')
+      void startStripeSession()
+    if (payment.method === 'cash') {
+      clientSecret.value = null
+      pendingBookingId.value = ''
+    }
+  },
+  { immediate: true },
+)
+
+watch(roomId, () => {
+  void resolveRoom()
+}, { immediate: true })
+
+async function confirmBooking() {
+  if (!payment.method) {
+    stripeError.value = 'Select a payment method.'
+    return
+  }
+  if (!roomTypeId.value) {
+    toast.error(roomLoadError.value || 'Room is not available to book.')
+    return
+  }
+  const token = await sessionToken()
+  if (!token) {
+    toast.error('Please sign in to complete this booking.')
+    return
+  }
+  submitting.value = true
+  stripeError.value = ''
+  try {
+    if (payment.method === 'cash') {
+      const booking = await createBooking(token, buildRequest('CASH'))
+      await router.push({ name: 'booking-success', params: { bookingId: booking.id } })
+      return
+    }
+    if (!clientSecret.value)
+      await ensureStripeSession()
+    const confirmed = await paymentStep.value?.confirmCard()
+    if (!confirmed?.ok) {
+      const message = confirmed?.message || 'Payment failed.'
+      const formNotReady = /not ready/i.test(message)
+      if (formNotReady || !pendingBookingId.value) {
+        stripeError.value = message
+        return
+      }
+      await router.push({
+        name: 'booking-failed',
+        params: { bookingId: pendingBookingId.value },
+        query: route.query,
+      })
+      return
+    }
+    await router.push({ name: 'booking-success', params: { bookingId: pendingBookingId.value } })
+  }
+  catch (error) {
+    stripeError.value = apiErrorMessage(error, 'Could not complete this booking.')
+    toast.error(stripeError.value)
+  }
+  finally {
+    submitting.value = false
+  }
 }
 
 function onStepChange(next: number | undefined) {
@@ -334,16 +409,19 @@ function onContinue() {
     step.value = 3
     return
   }
-  if (!validatePayment()) {
-    focusFirstPaymentError()
-    return
-  }
-  toast.success('Booking details captured. Payment will be processed when the booking API is ready.')
+  void confirmBooking()
+}
+
+function roomDetailSlug() {
+  if (roomDetails[roomId.value])
+    return roomId.value
+  const match = Object.entries(roomDetails).find(([, room]) => room.name === roomName.value)
+  return match?.[0] ?? defaultRoomId
 }
 
 function leaveExpiredSession() {
   expiredOpen.value = false
-  router.push({ name: 'room-detail', params: { roomId: roomId.value } })
+  router.push({ name: 'room-detail', params: { roomId: roomDetailSlug() } })
 }
 
 function fillIfEmpty(field: keyof GuestDetails, value: string | null | undefined) {
@@ -526,17 +604,18 @@ watch(
             />
             <BookingPaymentStep
               v-else
+              ref="paymentStep"
               v-model:payment="payment"
-              :errors="paymentErrors"
-              @touch="touchPaymentField"
+              :client-secret="clientSecret"
+              :stripe-error="stripeError"
             />
 
             <div class="mt-10 hidden items-center justify-between gap-4 lg:flex">
               <Button type="button" variant="ghost" @click="goBack">
                 Back
               </Button>
-              <Button type="submit">
-                {{ step === 3 ? 'Confirm Booking' : 'Next' }}
+              <Button type="submit" :disabled="submitting">
+                {{ step === 3 ? (submitting ? 'Confirming…' : 'Confirm Booking') : 'Next' }}
               </Button>
             </div>
           </div>
@@ -556,8 +635,8 @@ watch(
             <Button type="button" variant="ghost" @click="goBack">
               Back
             </Button>
-            <Button type="submit">
-              {{ step === 3 ? 'Confirm Booking' : 'Next' }}
+            <Button type="submit" :disabled="submitting">
+              {{ step === 3 ? (submitting ? 'Confirming…' : 'Confirm Booking') : 'Next' }}
             </Button>
           </div>
         </form>

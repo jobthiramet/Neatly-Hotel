@@ -1,47 +1,120 @@
-import type { DateValue } from '@internationalized/date'
 import { parseDate } from '@internationalized/date'
 import { defineStore } from 'pinia'
-import { shallowRef } from 'vue'
-import type { UserBooking } from '@/data/booking'
-import { mockUserBookings } from '@/data/booking'
+import { computed, ref } from 'vue'
+import { getBooking, listBookings, type BookingResponse } from '@/api/bookings'
+import type { BookingStatus, PriceBreakdownItem, UserBooking } from '@/data/booking'
+import superiorGardenImage from '@/assets/home/room-superior-garden-view.webp'
+
+function hoursBetween(fromMs: number, toMs: number) {
+  return (toMs - fromMs) / 3_600_000
+}
+
+export function uiStatus(booking: BookingResponse, now = Date.now()): BookingStatus {
+  if (booking.status === 'CANCELLED')
+    return 'cancelled'
+  if (booking.status === 'CHECKED_IN' || booking.status === 'COMPLETED')
+    return 'checked-in'
+  const checkInMs = Date.parse(`${booking.checkIn}T14:00:00`)
+  if (hoursBetween(now, checkInMs) <= 24)
+    return 'checkin-soon'
+  if (hoursBetween(Date.parse(booking.createdAt), now) <= 24)
+    return 'within-24h'
+  return 'after-24h'
+}
+
+export function toUserBooking(booking: BookingResponse): UserBooking {
+  return {
+    id: booking.id,
+    roomName: booking.roomName,
+    roomImage: booking.roomImageUrl || superiorGardenImage,
+    roomImageAlt: booking.roomName,
+    bookedAt: parseDate(booking.createdAt.slice(0, 10)),
+    cancellationDate: booking.cancelledAt ? parseDate(booking.cancelledAt.slice(0, 10)) : undefined,
+    checkIn: {
+      date: parseDate(booking.checkIn),
+      timeText: booking.checkInTimeText,
+    },
+    checkOut: {
+      date: parseDate(booking.checkOut),
+      timeText: booking.checkOutTimeText,
+    },
+    guestsText: booking.guests === 1 ? '1 Guest' : `${booking.guests} Guests`,
+    nightsText: booking.nights === 1 ? '1 Night' : `${booking.nights} Nights`,
+    paymentMethodText: booking.paymentMethodText,
+    breakdown: booking.items.map((item): PriceBreakdownItem => ({
+      label: item.label,
+      amount: item.amount,
+      isDiscount: item.kind === 'DISCOUNT',
+    })),
+    totalPrice: booking.grandTotal,
+    additionalRequest: booking.additionalRequest || undefined,
+    status: uiStatus(booking),
+  }
+}
 
 export const useBookingStore = defineStore('booking', () => {
-  const bookings = shallowRef<UserBooking[]>([...mockUserBookings])
+  const records = ref<BookingResponse[]>([])
+  const loading = ref(false)
+  const error = ref('')
 
-  function getBooking(id: string): UserBooking | undefined {
-    return bookings.value.find(b => b.id === id) || bookings.value[0]
+  const bookings = computed(() => records.value.map(toUserBooking))
+
+  async function loadMine(token: string) {
+    loading.value = true
+    error.value = ''
+    try {
+      const page = await listBookings(token, 0, 50)
+      records.value = page.content
+    }
+    catch (cause) {
+      error.value = cause instanceof Error ? cause.message : 'Could not load bookings.'
+      records.value = []
+    }
+    finally {
+      loading.value = false
+    }
   }
 
-  function cancelBooking(id: string, cancellationDate: DateValue = parseDate('2022-10-16')) {
-    bookings.value = bookings.value.map(b => {
-      if (b.id === id) {
-        return {
-          ...b,
-          status: 'cancelled',
-          cancellationDate,
-        }
-      }
-      return b
-    })
+  async function loadOne(token: string, id: string) {
+    const booking = await getBooking(token, id)
+    const index = records.value.findIndex(item => item.id === id)
+    if (index >= 0)
+      records.value[index] = booking
+    else
+      records.value = [booking, ...records.value]
+    return booking
   }
 
-  function updateBookingDates(id: string, checkIn: DateValue, checkOut: DateValue) {
-    bookings.value = bookings.value.map(b => {
-      if (b.id === id) {
-        return {
-          ...b,
-          checkIn: { ...b.checkIn, date: checkIn },
-          checkOut: { ...b.checkOut, date: checkOut },
-        }
+  function getBookingRecord(id: string) {
+    return records.value.find(item => item.id === id)
+  }
+
+  function getBookingView(id: string): UserBooking | undefined {
+    const record = getBookingRecord(id)
+    return record ? toUserBooking(record) : undefined
+  }
+
+  function cancelBooking(id: string, cancellationDate: { toString: () => string }) {
+    records.value = records.value.map((booking) => {
+      if (booking.id !== id)
+        return booking
+      return {
+        ...booking,
+        status: 'CANCELLED',
+        cancelledAt: `${cancellationDate.toString()}T00:00:00Z`,
       }
-      return b
     })
   }
 
   return {
+    records,
     bookings,
-    getBooking,
+    loading,
+    error,
+    loadMine,
+    loadOne,
+    getBooking: getBookingView,
+    getBookingRecord,
     cancelBooking,
-    updateBookingDates,
   }
 })

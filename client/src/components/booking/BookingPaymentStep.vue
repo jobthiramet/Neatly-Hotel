@@ -1,51 +1,109 @@
 <!-- Figma: user > booking > payment method (desktop + mobile) -->
 <script setup lang="ts">
+import type { Stripe, StripeCheckoutElementsSdk, StripePaymentElement } from '@stripe/stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { IconCash, IconCreditCard } from '@/components/icons'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { PaymentOption } from '@/components/ui/payment-option'
 import { RadioGroup } from '@/components/ui/radio-group'
-import type { CheckoutPayment, CheckoutPaymentMethod, PaymentField } from '@/data/booking'
+import type { CheckoutPayment, CheckoutPaymentMethod } from '@/data/booking'
 
 const payment = defineModel<CheckoutPayment>('payment', { required: true })
 
-defineProps<{
-  errors: Record<PaymentField, string>
+const props = defineProps<{
+  clientSecret: string | null
+  stripeError: string
 }>()
 
-const emit = defineEmits<{
-  touch: [field: PaymentField]
-}>()
+const elementHost = ref<HTMLElement | null>(null)
+let stripePromise: Promise<Stripe | null> | null = null
+let checkout: StripeCheckoutElementsSdk | null = null
+let paymentElement: StripePaymentElement | null = null
+const elementReady = ref(false)
+
+function token(name: string) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+function stripeInstance() {
+  const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+  if (!key || key.includes('YOUR_STRIPE'))
+    return Promise.resolve(null)
+  stripePromise ??= loadStripe(key)
+  return stripePromise
+}
+
+async function mountElement(secret: string) {
+  unmountElement()
+  elementReady.value = false
+  await nextTick()
+  if (!elementHost.value)
+    return
+  const stripe = await stripeInstance()
+  if (!stripe) {
+    return
+  }
+  checkout = stripe.initCheckoutElementsSdk({
+    clientSecret: secret,
+    elementsOptions: {
+      appearance: {
+        theme: 'stripe',
+        variables: {
+          colorPrimary: token('--color-orange-600'),
+          colorBackground: token('--color-white'),
+          colorText: token('--color-gray-800'),
+          colorDanger: token('--color-red'),
+          fontFamily: token('--font-sans'),
+          borderRadius: '4px',
+        },
+      },
+    },
+  })
+  paymentElement = checkout.createPaymentElement({ layout: 'tabs' })
+  paymentElement.mount(elementHost.value)
+  elementReady.value = true
+}
+
+function unmountElement() {
+  paymentElement?.unmount()
+  paymentElement = null
+  checkout = null
+  elementReady.value = false
+}
+
+watch(
+  () => [payment.value.method, props.clientSecret] as const,
+  async ([method, secret]) => {
+    if (method !== 'credit' || !secret) {
+      unmountElement()
+      return
+    }
+    await mountElement(secret)
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(unmountElement)
+
+async function confirmCard() {
+  if (!checkout)
+    return { ok: false as const, message: 'Card form is not ready yet.' }
+  const loaded = await checkout.loadActions()
+  if (loaded.type === 'error')
+    return { ok: false as const, message: loaded.error.message || 'Could not confirm payment.' }
+  const result = await loaded.actions.confirm({ redirect: 'if_required' })
+  if (result.type === 'error')
+    return { ok: false as const, message: result.error.message || 'Payment failed.' }
+  return { ok: true as const }
+}
+
+defineExpose({ confirmCard, elementReady })
 
 function setMethod(value: unknown) {
-  if (value === 'credit' || value === 'cash') {
+  if (value === 'credit' || value === 'cash')
     payment.value.method = value
-    emit('touch', 'method')
-  }
-}
-
-function formatCardNumber(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 19)
-  return digits.replace(/(\d{4})(?=\d)/g, '$1 ')
-}
-
-function formatExpiry(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 4)
-  if (digits.length <= 2)
-    return digits
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`
-}
-
-function onCardNumberInput(value: string | number) {
-  payment.value.cardNumber = formatCardNumber(String(value))
-}
-
-function onExpiryInput(value: string | number) {
-  payment.value.expiry = formatExpiry(String(value))
-}
-
-function onCvcInput(value: string | number) {
-  payment.value.cvc = String(value).replace(/\D/g, '').slice(0, 4)
 }
 
 function onPromotionCodeInput(value: string | number) {
@@ -83,9 +141,6 @@ const methodLabel: Record<CheckoutPaymentMethod, string> = {
           <IconCash /> {{ methodLabel.cash }}
         </PaymentOption>
       </RadioGroup>
-      <p v-if="errors.method" id="payment-method-error" class="text-body2 font-normal tracking-normal text-red">
-        {{ errors.method }}
-      </p>
     </section>
 
     <div class="flex flex-col gap-6">
@@ -94,96 +149,55 @@ const methodLabel: Record<CheckoutPaymentMethod, string> = {
         aria-labelledby="credit-card-title"
         class="flex flex-col gap-6"
       >
-      <h2 id="credit-card-title" class="text-h5 text-gray-800">
-        {{ methodLabel.credit }}
-      </h2>
-
-      <FormField label="Card Number" for="card-number" :error="errors.cardNumber">
-        <Input
-          id="card-number"
-          :model-value="payment.cardNumber"
-          inputmode="numeric"
-          autocomplete="cc-number"
-          placeholder="8888 8888 8888 8888"
-          :aria-invalid="!!errors.cardNumber"
-          aria-describedby="card-number-error"
-          @update:model-value="onCardNumberInput"
-          @blur="emit('touch', 'cardNumber')"
+        <h2 id="credit-card-title" class="text-h5 text-gray-800">
+          {{ methodLabel.credit }}
+        </h2>
+        <div
+          id="payment-element"
+          ref="elementHost"
+          class="min-h-20"
         />
-      </FormField>
-
-      <FormField label="Card Owner" for="card-owner" :error="errors.cardOwner">
-        <Input
-          id="card-owner"
-          v-model="payment.cardOwner"
-          autocomplete="cc-name"
-          placeholder="Card owner"
-          :aria-invalid="!!errors.cardOwner"
-          aria-describedby="card-owner-error"
-          @blur="emit('touch', 'cardOwner')"
-        />
-      </FormField>
-
-      <div class="grid grid-cols-2 gap-4 lg:gap-6">
-        <FormField label="Expiry Date" for="card-expiry" :error="errors.expiry">
-          <Input
-            id="card-expiry"
-            :model-value="payment.expiry"
-            inputmode="numeric"
-            autocomplete="cc-exp"
-            placeholder="MM/YY"
-            :aria-invalid="!!errors.expiry"
-            aria-describedby="card-expiry-error"
-            @update:model-value="onExpiryInput"
-            @blur="emit('touch', 'expiry')"
-          />
-        </FormField>
-        <FormField label="CVC/CVV" for="card-cvc" :error="errors.cvc">
-          <Input
-            id="card-cvc"
-            :model-value="payment.cvc"
-            inputmode="numeric"
-            autocomplete="cc-csc"
-            placeholder="CVC"
-            :aria-invalid="!!errors.cvc"
-            aria-describedby="card-cvc-error"
-            @update:model-value="onCvcInput"
-            @blur="emit('touch', 'cvc')"
-          />
-        </FormField>
-      </div>
-    </section>
-
-    <section
-      v-else
-      aria-labelledby="cash-title"
-      class="flex flex-col gap-6"
-    >
-      <h2 id="cash-title" class="text-h5 text-gray-800">
-        {{ methodLabel.cash }}
-      </h2>
-      <div class="flex items-start gap-4 rounded-sm bg-gray-200 p-4">
-        <IconCash class="size-8 shrink-0 text-orange-500" aria-hidden="true" />
-        <p class="text-body2 font-normal text-gray-700">
-          Pay at the hotel with cash or cheque. No payment is required until you check in
+        <p v-if="stripeError" class="text-body2 font-normal tracking-normal text-red" role="alert">
+          {{ stripeError }}
         </p>
-      </div>
-    </section>
+        <p
+          v-else-if="!clientSecret"
+          class="text-body2 font-normal text-gray-600"
+        >
+          Preparing Stripe’s form…
+        </p>
+      </section>
 
-    <FormField
-      label="Promotion Code"
-      for="promotion-code"
-      class="border-t border-gray-300 pt-6"
-    >
-      <Input
-        id="promotion-code"
-        :model-value="payment.promotionCode"
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="NEATLYNEW400"
-        @update:model-value="onPromotionCodeInput"
-      />
-    </FormField>
+      <section
+        v-else
+        aria-labelledby="cash-title"
+        class="flex flex-col gap-6"
+      >
+        <h2 id="cash-title" class="text-h5 text-gray-800">
+          {{ methodLabel.cash }}
+        </h2>
+        <div class="flex items-start gap-4 rounded-sm bg-gray-200 p-4">
+          <IconCash class="size-8 shrink-0 text-orange-500" aria-hidden="true" />
+          <p class="text-body2 font-normal text-gray-700">
+            Pay at the hotel with cash or cheque. No payment is required until you check in
+          </p>
+        </div>
+      </section>
+
+      <FormField
+        label="Promotion Code"
+        for="promotion-code"
+        class="border-t border-gray-300 pt-6"
+      >
+        <Input
+          id="promotion-code"
+          :model-value="payment.promotionCode"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="NEATLYNEW400"
+          @update:model-value="onPromotionCodeInput"
+        />
+      </FormField>
     </div>
   </div>
 </template>
