@@ -18,6 +18,7 @@ import com.neatly.hotel.service.BookingCatalog;
 
 public record BookingResponse(
 		UUID id,
+		String bookingNumber,
 		UUID roomTypeId,
 		String roomName,
 		String roomImageUrl,
@@ -67,7 +68,8 @@ public record BookingResponse(
 				.orElse(null);
 		return new BookingResponse(
 				booking.getId(),
-				booking.getRoom().getId(),
+				booking.getBookingNumber(),
+				booking.getRoomType().getId(),
 				booking.getRoomNameSnapshot(),
 				booking.getRoomImageUrl(),
 				booking.getCheckIn(),

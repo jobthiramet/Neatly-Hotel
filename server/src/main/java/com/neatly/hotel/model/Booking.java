@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -16,6 +17,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import lombok.Getter;
@@ -27,12 +29,11 @@ import lombok.Setter;
 @Table(name = "bookings")
 public class Booking extends BaseEntity {
 
-	@Column(nullable = false, length = 64)
-	private String clerkUserId;
+	@Column(nullable = false, unique = true, length = 20)
+	private String bookingNumber;
 
-	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "room_type_id", nullable = false)
-	private Room room;
+	@Column(name = "user_id", nullable = false, length = 64)
+	private String userId;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "promotion_code_id")
@@ -46,9 +47,6 @@ public class Booking extends BaseEntity {
 
 	@Column(nullable = false)
 	private Integer guests;
-
-	@Column(nullable = false)
-	private Integer roomsCount = 1;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 30)
@@ -94,7 +92,7 @@ public class Booking extends BaseEntity {
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal discountTotal;
 
-	@Column(nullable = false, precision = 12, scale = 2)
+	@Column(name = "total_price", nullable = false, precision = 12, scale = 2)
 	private BigDecimal grandTotal;
 
 	@Column(nullable = false, length = 120)
@@ -110,10 +108,31 @@ public class Booking extends BaseEntity {
 	private Instant checkedInAt;
 
 	@OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
+	@OrderBy("createdAt ASC")
+	private List<BookingRoom> rooms = new ArrayList<>();
+
+	@OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
 	@OrderBy("sortOrder ASC")
 	private List<BookingItem> items = new ArrayList<>();
 
 	@OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
 	@OrderBy("createdAt ASC")
 	private List<Payment> payments = new ArrayList<>();
+
+	public int getRoomsCount() {
+		return rooms == null ? 0 : rooms.size();
+	}
+
+	public RoomType getRoomType() {
+		return rooms == null || rooms.isEmpty() ? null : rooms.get(0).getRoomType();
+	}
+
+	@PrePersist
+	void assignBookingNumber() {
+		if (bookingNumber != null) {
+			return;
+		}
+		UUID source = getId() != null ? getId() : UUID.randomUUID();
+		bookingNumber = "N" + source.toString().replace("-", "").substring(0, 16).toUpperCase();
+	}
 }

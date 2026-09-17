@@ -1,4 +1,4 @@
-﻿-- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001โ€“010.
+-- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001–011.
 -- Reference for reading the model. For setup, run the numbered files in order; they also create storage buckets,
 -- row level security, policies, triggers, views and seed data. Every statement below is safe to re-run.
 -- Keep this file in sync when a numbered migration changes a table.
@@ -39,13 +39,15 @@ create table if not exists room_types (
   price_per_night numeric(12, 2) not null,
   promotion_price numeric(12, 2),
   capacity integer not null default 2,
+  total_units integer not null default 4,
   bed_type varchar(30) not null default 'DOUBLE',
   size_sqm integer not null default 1,
   description text not null default '',
   deleted_at timestamptz,
   constraint room_types_bed_type_check check (bed_type in ('SINGLE', 'DOUBLE', 'KING', 'TWIN')),
   constraint room_types_values_check check (price_per_night > 0 and size_sqm > 0 and capacity between 2 and 6
-    and (promotion_price is null or (promotion_price > 0 and promotion_price < price_per_night)))
+    and (promotion_price is null or (promotion_price > 0 and promotion_price < price_per_night))),
+  constraint room_types_total_units_check check (total_units >= 1)
 );
 create unique index if not exists room_types_name_active_key on room_types (lower(name)) where deleted_at is null;
 create index if not exists room_types_active_created_at_idx on room_types (created_at desc) where deleted_at is null;
@@ -105,6 +107,17 @@ create table if not exists room_units (
 create index if not exists room_units_room_type_id_idx on room_units (room_type_id);
 create index if not exists room_units_room_status_id_idx on room_units (room_status_id);
 
+create table if not exists promotion_codes (
+  id uuid primary key,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  code varchar(40) not null,
+  amount_off numeric(12, 2) not null,
+  active boolean not null default true,
+  constraint promotion_codes_amount_check check (amount_off > 0)
+);
+create unique index if not exists promotion_codes_code_key on promotion_codes (upper(code));
+
 create table if not exists bookings (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -114,19 +127,43 @@ create table if not exists bookings (
   check_in date not null,
   check_out date not null,
   guests integer not null,
-  status varchar(20) not null default 'PENDING',
+  status varchar(30) not null default 'PENDING_PAYMENT',
   special_request text,
   total_price numeric(12, 2) not null,
   cancelled_at timestamptz,
+  promotion_code_id uuid references promotion_codes (id),
+  payment_method varchar(20) not null,
+  guest_first_name varchar(100) not null,
+  guest_last_name varchar(100) not null,
+  guest_email varchar(254) not null,
+  guest_phone varchar(32) not null,
+  guest_country varchar(100) not null,
+  guest_date_of_birth date not null,
+  standard_requests text not null default '[]',
+  additional_request text,
+  currency varchar(3) not null default 'THB',
+  room_subtotal numeric(12, 2) not null,
+  extras_total numeric(12, 2) not null,
+  discount_total numeric(12, 2) not null,
+  room_name_snapshot varchar(120) not null,
+  room_image_url text,
+  hold_expires_at timestamptz,
+  checked_in_at timestamptz,
   constraint bookings_dates_check check (check_out > check_in),
-  constraint bookings_guests_check check (guests > 0),
+  constraint bookings_guests_check check (guests between 1 and 6),
   constraint bookings_total_price_check check (total_price >= 0),
-  constraint bookings_status_check check (status in ('PENDING', 'CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'CANCELLED'))
+  constraint bookings_status_check check (status in (
+    'PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'COMPLETED', 'CANCELLED', 'EXPIRED'
+  )),
+  constraint bookings_payment_method_check check (payment_method in ('STRIPE', 'CASH'))
 );
 create index if not exists bookings_user_id_idx on bookings (user_id);
 create index if not exists bookings_check_in_idx on bookings (check_in);
+create index if not exists bookings_user_created_idx on bookings (user_id, created_at desc);
+create index if not exists bookings_status_idx on bookings (status);
 
--- stay and cancelled are kept in sync with bookings by triggers (010_bookings.sql).
+-- stay and cancelled are kept in sync with bookings by triggers (010_bookings.sql; EXPIRED also
+-- cancels the stay in 011_bookings_checkout.sql).
 create table if not exists booking_rooms (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -142,3 +179,60 @@ create table if not exists booking_rooms (
 );
 create index if not exists booking_rooms_booking_id_idx on booking_rooms (booking_id);
 create index if not exists booking_rooms_room_type_stay_idx on booking_rooms using gist (room_type_id, stay);
+
+create table if not exists booking_items (
+  id uuid primary key,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  booking_id uuid not null references bookings (id) on delete cascade,
+  kind varchar(20) not null,
+  code varchar(80) not null,
+  label varchar(200) not null,
+  quantity integer not null default 1,
+  unit_price numeric(12, 2) not null,
+  amount numeric(12, 2) not null,
+  sort_order integer not null default 0,
+  constraint booking_items_kind_check check (kind in ('ROOM', 'ADDON', 'DISCOUNT')),
+  constraint booking_items_quantity_check check (quantity >= 1)
+);
+create index if not exists booking_items_booking_idx on booking_items (booking_id, sort_order);
+
+create table if not exists payments (
+  id uuid primary key,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  booking_id uuid not null references bookings (id) on delete cascade,
+  parent_payment_id uuid references payments (id),
+  provider varchar(20) not null,
+  kind varchar(20) not null,
+  status varchar(20) not null,
+  amount numeric(12, 2) not null,
+  currency varchar(3) not null default 'THB',
+  stripe_checkout_session_id varchar(255),
+  stripe_payment_intent_id varchar(255),
+  stripe_refund_id varchar(255),
+  card_brand varchar(40),
+  card_last4 varchar(4),
+  paid_at timestamptz,
+  failure_message text,
+  constraint payments_provider_check check (provider in ('STRIPE', 'CASH')),
+  constraint payments_kind_check check (kind in ('CHARGE', 'REFUND')),
+  constraint payments_status_check check (status in (
+    'PENDING', 'UNPAID', 'SUCCEEDED', 'FAILED', 'CANCELLED'
+  )),
+  constraint payments_amount_check check (amount > 0)
+);
+create index if not exists payments_booking_idx on payments (booking_id);
+create unique index if not exists payments_stripe_session_key
+  on payments (stripe_checkout_session_id) where stripe_checkout_session_id is not null;
+create unique index if not exists payments_stripe_intent_key
+  on payments (stripe_payment_intent_id) where stripe_payment_intent_id is not null;
+create unique index if not exists payments_stripe_refund_key
+  on payments (stripe_refund_id) where stripe_refund_id is not null;
+
+create table if not exists stripe_events (
+  event_id varchar(255) primary key,
+  type varchar(120) not null,
+  stripe_object_id varchar(255),
+  processed_at timestamptz not null
+);

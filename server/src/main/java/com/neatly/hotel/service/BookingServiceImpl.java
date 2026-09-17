@@ -26,18 +26,19 @@ import com.neatly.hotel.model.Booking;
 import com.neatly.hotel.model.BookingItem;
 import com.neatly.hotel.model.BookingItemKind;
 import com.neatly.hotel.model.BookingPaymentMethod;
+import com.neatly.hotel.model.BookingRoom;
 import com.neatly.hotel.model.BookingStatus;
 import com.neatly.hotel.model.Payment;
 import com.neatly.hotel.model.PaymentKind;
 import com.neatly.hotel.model.PaymentProvider;
 import com.neatly.hotel.model.PaymentStatus;
 import com.neatly.hotel.model.PromotionCode;
-import com.neatly.hotel.model.Room;
+import com.neatly.hotel.model.RoomType;
 import com.neatly.hotel.model.StripeWebhookEvent;
 import com.neatly.hotel.repository.BookingRepository;
 import com.neatly.hotel.repository.PaymentRepository;
 import com.neatly.hotel.repository.PromotionCodeRepository;
-import com.neatly.hotel.repository.RoomRepository;
+import com.neatly.hotel.repository.RoomTypeRepository;
 import com.neatly.hotel.repository.StripeWebhookEventRepository;
 
 @Service
@@ -51,11 +52,12 @@ public class BookingServiceImpl implements BookingService {
 	private static final List<BookingStatus> HISTORY = List.of(
 			BookingStatus.CONFIRMED,
 			BookingStatus.CHECKED_IN,
+			BookingStatus.CHECKED_OUT,
 			BookingStatus.COMPLETED,
 			BookingStatus.CANCELLED);
 
 	private final BookingRepository bookingRepository;
-	private final RoomRepository roomRepository;
+	private final RoomTypeRepository roomTypeRepository;
 	private final PromotionCodeRepository promotionCodeRepository;
 	private final PaymentRepository paymentRepository;
 	private final StripeWebhookEventRepository stripeEventRepository;
@@ -65,14 +67,14 @@ public class BookingServiceImpl implements BookingService {
 
 	public BookingServiceImpl(
 			BookingRepository bookingRepository,
-			RoomRepository roomRepository,
+			RoomTypeRepository roomTypeRepository,
 			PromotionCodeRepository promotionCodeRepository,
 			PaymentRepository paymentRepository,
 			StripeWebhookEventRepository stripeEventRepository,
 			StripeCheckoutGateway stripe,
 			@Value("${app.client-origin:http://localhost:5173}") String clientOrigin) {
 		this.bookingRepository = bookingRepository;
-		this.roomRepository = roomRepository;
+		this.roomTypeRepository = roomTypeRepository;
 		this.promotionCodeRepository = promotionCodeRepository;
 		this.paymentRepository = paymentRepository;
 		this.stripeEventRepository = stripeEventRepository;
@@ -82,24 +84,25 @@ public class BookingServiceImpl implements BookingService {
 
 	@Override
 	public BookingResponse create(String clerkUserId, CreateBookingRequest request) {
-		Room room = roomRepository.findByIdAndDeletedAtIsNull(request.roomTypeId())
+		RoomType roomType = roomTypeRepository.findByIdAndDeletedAtIsNull(request.roomTypeId())
 				.orElseThrow(() -> new ResourceNotFoundException("Room not found: " + request.roomTypeId()));
-		if (request.guests() > room.getCapacity()) {
+		if (request.guests() > roomType.getCapacity()) {
 			throw new ApiException("Guest count exceeds room capacity", HttpStatus.BAD_REQUEST);
 		}
-		assertAvailable(room, request.checkIn(), request.checkOut(), request.rooms(), null);
+		assertAvailable(roomType, request.checkIn(), request.checkOut(), request.rooms(), null);
 
 		if (request.paymentMethod() == BookingPaymentMethod.STRIPE) {
 			expireOpenStripeDrafts(clerkUserId);
 		}
 
+		BigDecimal nightly = roomType.getPromotionPrice() != null
+				? roomType.getPromotionPrice()
+				: roomType.getPricePerNight();
 		Booking booking = new Booking();
-		booking.setClerkUserId(clerkUserId);
-		booking.setRoom(room);
+		booking.setUserId(clerkUserId);
 		booking.setCheckIn(request.checkIn());
 		booking.setCheckOut(request.checkOut());
 		booking.setGuests(request.guests());
-		booking.setRoomsCount(request.rooms());
 		booking.setPaymentMethod(request.paymentMethod());
 		booking.setGuestFirstName(request.firstName().trim());
 		booking.setGuestLastName(request.lastName().trim());
@@ -109,13 +112,20 @@ public class BookingServiceImpl implements BookingService {
 		booking.setGuestDateOfBirth(request.dateOfBirth());
 		booking.setAdditionalRequest(blankToNull(request.additionalRequest()));
 		booking.setStandardRequests(writePreferences(request.standardRequestCodes()));
-		booking.setRoomNameSnapshot(room.getName());
-		booking.setRoomImageUrl(room.getImages().stream()
+		booking.setRoomNameSnapshot(roomType.getName());
+		booking.setRoomImageUrl(roomType.getImages().stream()
 				.filter(image -> Boolean.TRUE.equals(image.getIsMain()))
 				.map(image -> image.getUrl())
 				.findFirst()
 				.orElse(null));
-		price(booking, room, request.specialRequestCodes(), request.promotionCode());
+		for (int i = 0; i < request.rooms(); i++) {
+			BookingRoom booked = new BookingRoom();
+			booked.setBooking(booking);
+			booked.setRoomType(roomType);
+			booked.setPricePerNight(nightly);
+			booking.getRooms().add(booked);
+		}
+		price(booking, roomType, request.specialRequestCodes(), request.promotionCode());
 
 		if (request.paymentMethod() == BookingPaymentMethod.CASH) {
 			booking.setStatus(BookingStatus.CONFIRMED);
@@ -141,7 +151,12 @@ public class BookingServiceImpl implements BookingService {
 		if (booking.getStatus() != BookingStatus.PENDING_PAYMENT && booking.getStatus() != BookingStatus.EXPIRED) {
 			throw new ApiException("This booking cannot be paid", HttpStatus.BAD_REQUEST);
 		}
-		assertAvailable(booking.getRoom(), booking.getCheckIn(), booking.getCheckOut(), booking.getRoomsCount(), booking.getId());
+		assertAvailable(
+				booking.getRoomType(),
+				booking.getCheckIn(),
+				booking.getCheckOut(),
+				booking.getRoomsCount(),
+				booking.getId());
 		booking.setStatus(BookingStatus.PENDING_PAYMENT);
 		booking.setHoldExpiresAt(Instant.now().plusSeconds(BookingCatalog.HOLD_SECONDS));
 		return attachStripeSession(booking);
@@ -154,7 +169,7 @@ public class BookingServiceImpl implements BookingService {
 				Math.max(pageable.getPageNumber(), 0),
 				Math.clamp(pageable.getPageSize() == 0 ? 10 : pageable.getPageSize(), 1, 50));
 		return PageResponse.from(
-				bookingRepository.findByClerkUserIdAndStatusInOrderByCreatedAtDesc(clerkUserId, HISTORY, page),
+				bookingRepository.findByUserIdAndStatusInOrderByCreatedAtDesc(clerkUserId, HISTORY, page),
 				booking -> toResponse(booking, null));
 	}
 
@@ -261,9 +276,9 @@ public class BookingServiceImpl implements BookingService {
 				});
 	}
 
-	private void price(Booking booking, Room room, List<String> specialCodes, String promotionCode) {
+	private void price(Booking booking, RoomType roomType, List<String> specialCodes, String promotionCode) {
 		int nights = (int) (booking.getCheckOut().toEpochDay() - booking.getCheckIn().toEpochDay());
-		BigDecimal nightly = room.getPromotionPrice() != null ? room.getPromotionPrice() : room.getPricePerNight();
+		BigDecimal nightly = roomType.getPromotionPrice() != null ? roomType.getPromotionPrice() : roomType.getPricePerNight();
 		BigDecimal roomSubtotal = nightly.multiply(BigDecimal.valueOf((long) nights * booking.getRoomsCount()))
 				.setScale(2, RoundingMode.HALF_UP);
 		booking.getItems().clear();
@@ -271,7 +286,7 @@ public class BookingServiceImpl implements BookingService {
 				booking,
 				BookingItemKind.ROOM,
 				"room",
-				room.getName() + " Room",
+				roomType.getName() + " Room",
 				nights * booking.getRoomsCount(),
 				nightly,
 				roomSubtotal,
@@ -313,22 +328,22 @@ public class BookingServiceImpl implements BookingService {
 		booking.setCurrency("THB");
 	}
 
-	private void assertAvailable(Room room, LocalDate checkIn, LocalDate checkOut, int rooms, UUID excludeId) {
-		long occupied = bookingRepository.occupiedUnits(room.getId(), checkIn, checkOut, Instant.now(), excludeId, OCCUPYING);
-		if (occupied + rooms > room.getTotalUnits()) {
+	private void assertAvailable(RoomType roomType, LocalDate checkIn, LocalDate checkOut, int rooms, UUID excludeId) {
+		long occupied = bookingRepository.occupiedUnits(roomType.getId(), checkIn, checkOut, Instant.now(), excludeId, OCCUPYING);
+		if (occupied + rooms > roomType.getTotalUnits()) {
 			throw new ApiException("This room type is not available for the selected dates", HttpStatus.CONFLICT);
 		}
 	}
 
 	private void expireOpenStripeDrafts(String clerkUserId) {
-		bookingRepository.findByClerkUserIdAndStatus(clerkUserId, BookingStatus.PENDING_PAYMENT).forEach(draft -> {
+		bookingRepository.findByUserIdAndStatus(clerkUserId, BookingStatus.PENDING_PAYMENT).forEach(draft -> {
 			draft.setStatus(BookingStatus.EXPIRED);
 			latestStripeCharge(draft).ifPresent(payment -> payment.setStatus(PaymentStatus.CANCELLED));
 		});
 	}
 
 	private Booking requireMine(String clerkUserId, UUID bookingId) {
-		return bookingRepository.findByIdAndClerkUserId(bookingId, clerkUserId)
+		return bookingRepository.findByIdAndUserId(bookingId, clerkUserId)
 				.orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + bookingId));
 	}
 

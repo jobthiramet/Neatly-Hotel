@@ -4,6 +4,7 @@ export type BookingStatus =
   | 'PENDING_PAYMENT'
   | 'CONFIRMED'
   | 'CHECKED_IN'
+  | 'CHECKED_OUT'
   | 'COMPLETED'
   | 'CANCELLED'
   | 'EXPIRED'
@@ -27,6 +28,7 @@ export interface NamedRequest {
 
 export interface BookingResponse {
   id: string
+  bookingNumber: string
   roomTypeId: string
   roomName: string
   roomImageUrl: string | null

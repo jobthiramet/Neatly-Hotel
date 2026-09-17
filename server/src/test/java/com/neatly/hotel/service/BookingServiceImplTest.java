@@ -28,17 +28,17 @@ import com.neatly.hotel.model.BookingPaymentMethod;
 import com.neatly.hotel.model.BookingStatus;
 import com.neatly.hotel.model.PaymentStatus;
 import com.neatly.hotel.model.PromotionCode;
-import com.neatly.hotel.model.Room;
+import com.neatly.hotel.model.RoomType;
 import com.neatly.hotel.repository.BookingRepository;
 import com.neatly.hotel.repository.PaymentRepository;
 import com.neatly.hotel.repository.PromotionCodeRepository;
-import com.neatly.hotel.repository.RoomRepository;
+import com.neatly.hotel.repository.RoomTypeRepository;
 import com.neatly.hotel.repository.StripeWebhookEventRepository;
 
 class BookingServiceImplTest {
 
 	private final BookingRepository bookingRepository = mock(BookingRepository.class);
-	private final RoomRepository roomRepository = mock(RoomRepository.class);
+	private final RoomTypeRepository roomTypeRepository = mock(RoomTypeRepository.class);
 	private final PromotionCodeRepository promotionCodeRepository = mock(PromotionCodeRepository.class);
 	private final PaymentRepository paymentRepository = mock(PaymentRepository.class);
 	private final StripeWebhookEventRepository stripeEventRepository = mock(StripeWebhookEventRepository.class);
@@ -49,7 +49,7 @@ class BookingServiceImplTest {
 	void setUp() {
 		service = new BookingServiceImpl(
 				bookingRepository,
-				roomRepository,
+				roomTypeRepository,
 				promotionCodeRepository,
 				paymentRepository,
 				stripeEventRepository,
@@ -61,11 +61,11 @@ class BookingServiceImplTest {
 
 	@Test
 	void cashBookingConfirmsWithoutStripe() {
-		Room room = room(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
-		when(roomRepository.findByIdAndDeletedAtIsNull(room.getId())).thenReturn(Optional.of(room));
-		when(bookingRepository.occupiedUnits(eq(room.getId()), any(), any(), any(), isNull(), any())).thenReturn(0L);
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(0L);
 
-		var response = service.create("user_abc", request(room.getId(), BookingPaymentMethod.CASH, "NEATLYNEW400", List.of("airport-transfer")));
+		var response = service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, "NEATLYNEW400", List.of("airport-transfer")));
 
 		assertEquals(BookingStatus.CONFIRMED, response.status());
 		assertNull(response.clientSecret());
@@ -78,17 +78,18 @@ class BookingServiceImplTest {
 		ArgumentCaptor<Booking> saved = ArgumentCaptor.forClass(Booking.class);
 		verify(bookingRepository).save(saved.capture());
 		assertEquals(PaymentStatus.UNPAID, saved.getValue().getPayments().get(0).getStatus());
+		assertEquals(1, saved.getValue().getRoomsCount());
 	}
 
 	@Test
 	void rejectsOverlappingStayWhenInventoryIsFull() {
-		Room room = room(new BigDecimal("2500.00"), null);
-		when(roomRepository.findByIdAndDeletedAtIsNull(room.getId())).thenReturn(Optional.of(room));
-		when(bookingRepository.occupiedUnits(eq(room.getId()), any(), any(), any(), isNull(), any())).thenReturn(4L);
+		RoomType roomType = roomType(new BigDecimal("2500.00"), null);
+		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(4L);
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> service.create("user_abc", request(room.getId(), BookingPaymentMethod.CASH, null, List.of())));
+				() -> service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, null, List.of())));
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
 	}
 
@@ -116,17 +117,17 @@ class BookingServiceImplTest {
 				method);
 	}
 
-	private Room room(BigDecimal price, BigDecimal promoPrice) {
-		Room room = new Room();
-		room.setId(UUID.fromString("00000000-0000-0000-0001-000000000001"));
-		room.setName("Superior Garden View");
-		room.setPricePerNight(price);
-		room.setPromotionPrice(promoPrice);
-		room.setCapacity(2);
-		room.setTotalUnits(4);
+	private RoomType roomType(BigDecimal price, BigDecimal promoPrice) {
+		RoomType roomType = new RoomType();
+		roomType.setId(UUID.fromString("00000000-0000-0000-0001-000000000001"));
+		roomType.setName("Superior Garden View");
+		roomType.setPricePerNight(price);
+		roomType.setPromotionPrice(promoPrice);
+		roomType.setCapacity(2);
+		roomType.setTotalUnits(4);
 		when(promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrue("NEATLYNEW400"))
 				.thenReturn(Optional.of(promo()));
-		return room;
+		return roomType;
 	}
 
 	private PromotionCode promo() {

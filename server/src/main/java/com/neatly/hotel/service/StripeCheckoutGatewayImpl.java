@@ -52,7 +52,7 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 					.setCustomerEmail(booking.getGuestEmail())
 					.setReturnUrl(returnUrl)
 					.putMetadata("bookingId", booking.getId().toString())
-					.putMetadata("clerkUserId", booking.getClerkUserId())
+					.putMetadata("clerkUserId", booking.getUserId())
 					.addLineItem(SessionCreateParams.LineItem.builder()
 							.setQuantity(1L)
 							.setPriceData(SessionCreateParams.LineItem.PriceData.builder()

@@ -467,7 +467,7 @@ Upload or replace the signed-in user's profile picture. The server derives the C
 
 ### Bookings
 
-Guest checkout for a signed-in Clerk user. Prices, extras, and promo discounts are calculated on the server from `room_types` and `promotion_codes`. Inventory is `room_types.total_units` minus overlapping stays in `PENDING_PAYMENT`, `CONFIRMED`, or `CHECKED_IN` (expired Stripe drafts do not occupy a unit). Money is THB `numeric(12,2)`; Stripe amounts are that value × 100.
+Guest checkout for a signed-in Clerk user. Prices, extras, and promo discounts are calculated on the server from `room_types` and `promotion_codes`. Inventory is `room_types.total_units` minus overlapping `booking_rooms` in `PENDING_PAYMENT`, `CONFIRMED`, or `CHECKED_IN` (expired Stripe drafts do not occupy a unit). Checkout inserts one `booking_rooms` row per requested room with `room_unit_id` null; a physical unit is assigned later. Money is THB `numeric(12,2)`; Stripe amounts are that value × 100.
 
 Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Element). Do not send PAN/CVC to this API.
 
@@ -492,9 +492,9 @@ Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Ele
 | `promotionCode` | string | no | max 40; unknown or inactive codes are ignored |
 | `paymentMethod` | enum | yes | `STRIPE` or `CASH` |
 
-`BookingResponse` (selected fields): `id`, `roomTypeId`, `roomName`, `roomImageUrl`, `checkIn`, `checkOut`, `checkInTimeText`, `checkOutTimeText`, `guests`, `nights`, `roomsCount`, `status` (`PENDING_PAYMENT`, `CONFIRMED`, `CHECKED_IN`, `COMPLETED`, `CANCELLED`, `EXPIRED`), `paymentMethod`, guest fields, `standardRequests` (`{ code, label }[]`), `additionalRequest`, `promotionCode`, `currency` (`THB`), `items` (`kind` `ROOM` \| `ADDON` \| `DISCOUNT`), `roomSubtotal`, `extrasTotal`, `discountTotal`, `grandTotal`, `paymentMethodText`, `clientSecret` (Stripe Checkout client secret while a card payment is still pending; otherwise `null`), `holdExpiresAt`, `cancelledAt`, `createdAt`, `updatedAt`.
+`BookingResponse` (selected fields): `id`, `bookingNumber`, `roomTypeId`, `roomName`, `roomImageUrl`, `checkIn`, `checkOut`, `checkInTimeText`, `checkOutTimeText`, `guests`, `nights`, `roomsCount`, `status` (`PENDING_PAYMENT`, `CONFIRMED`, `CHECKED_IN`, `CHECKED_OUT`, `COMPLETED`, `CANCELLED`, `EXPIRED`), `paymentMethod`, guest fields, `standardRequests` (`{ code, label }[]`), `additionalRequest`, `promotionCode`, `currency` (`THB`), `items` (`kind` `ROOM` \| `ADDON` \| `DISCOUNT`), `roomSubtotal`, `extrasTotal`, `discountTotal`, `grandTotal`, `paymentMethodText`, `clientSecret` (Stripe Checkout client secret while a card payment is still pending; otherwise `null`), `holdExpiresAt`, `cancelledAt`, `createdAt`, `updatedAt`.
 
-Seeded promo: `NEATLYNEW400` (THB 400 off) from `008_bookings_and_payments.sql` / `local_promotion_seed.sql`.
+Seeded promo: `NEATLYNEW400` (THB 400 off) from `011_bookings_checkout.sql` / `local_promotion_seed.sql`.
 
 #### `POST /api/bookings`
 
@@ -555,6 +555,7 @@ Newest first. Mark breaking changes with **BREAKING**.
 - Room amenities are now stored in a shared `amenities` table. Request and response shapes are unchanged; `amenities` in `RoomRequest` is trimmed and case-insensitive duplicates are dropped (first spelling kept), and an existing amenity name is reused with its stored spelling.
 - Added authenticated guest checkout: `POST /api/bookings`, `GET /api/bookings`, `GET /api/bookings/{id}`, `POST /api/bookings/{id}/payment-session`.
 - Added public `POST /api/stripe/webhooks` (Checkout Session completed/expired). Card checkout uses Stripe Checkout `ui_mode: elements`; cash confirms immediately as unpaid pay-at-hotel.
+- Bookings now share `dev`'s `booking_rooms` inventory model: checkout writes one unassigned room row per requested unit; Stripe/cash columns live in `011_bookings_checkout.sql`.
 
 ### 2026-09-16
 

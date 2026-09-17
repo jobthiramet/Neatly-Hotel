@@ -17,18 +17,19 @@ import com.neatly.hotel.model.BookingStatus;
 
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
-	Page<Booking> findByClerkUserIdAndStatusInOrderByCreatedAtDesc(
-			String clerkUserId,
+	Page<Booking> findByUserIdAndStatusInOrderByCreatedAtDesc(
+			String userId,
 			List<BookingStatus> statuses,
 			Pageable pageable);
 
-	Optional<Booking> findByIdAndClerkUserId(UUID id, String clerkUserId);
+	Optional<Booking> findByIdAndUserId(UUID id, String userId);
 
-	List<Booking> findByClerkUserIdAndStatus(String clerkUserId, BookingStatus status);
+	List<Booking> findByUserIdAndStatus(String userId, BookingStatus status);
 
 	@Query("""
-			select coalesce(sum(b.roomsCount), 0) from Booking b
-			where b.room.id = :roomId
+			select count(r) from BookingRoom r
+			join r.booking b
+			where r.roomType.id = :roomTypeId
 			  and b.status in :statuses
 			  and b.checkIn < :checkOut
 			  and b.checkOut > :checkIn
@@ -40,7 +41,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 			  and (:excludeId is null or b.id <> :excludeId)
 			""")
 	long occupiedUnits(
-			@Param("roomId") UUID roomId,
+			@Param("roomTypeId") UUID roomTypeId,
 			@Param("checkIn") LocalDate checkIn,
 			@Param("checkOut") LocalDate checkOut,
 			@Param("now") Instant now,
