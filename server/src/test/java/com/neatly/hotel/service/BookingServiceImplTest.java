@@ -104,6 +104,7 @@ class BookingServiceImplTest {
 	}
 
 	@Test
+<<<<<<< HEAD
 	void cancelRefundsPaidStripeWhenCheckInIsMoreThan24HoursAway() {
 		Booking booking = confirmedBooking(BookingPaymentMethod.STRIPE, Instant.now().minus(Duration.ofHours(2)), bangkokToday().plusDays(4));
 		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
@@ -234,6 +235,28 @@ class BookingServiceImplTest {
 				ApiException.class,
 				() -> service.changeDates("user_abc", booking.getId(), new ChangeBookingDatesRequest(checkIn, checkIn.plusDays(1))));
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+=======
+	void multiRoomBookingNeedsThatManyFreeUnitsAndFitsGuestsAcrossRooms() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), null);
+		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(2L);
+
+		// 4 bookable units, 2 taken: 2 rooms for 4 guests (capacity 2 each) fit
+		var response = service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, null, List.of(), 2, 4));
+		assertEquals(2, response.roomsCount());
+		assertEquals(new BigDecimal("5000.00"), response.roomSubtotal());
+
+		// 3 taken: only 1 free, so 2 rooms are refused
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(3L);
+		ApiException full = assertThrows(ApiException.class,
+				() -> service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, null, List.of(), 2, 4)));
+		assertEquals(HttpStatus.CONFLICT, full.getStatus());
+
+		// 5 guests don't fit in 2 rooms of 2
+		ApiException tooMany = assertThrows(ApiException.class,
+				() -> service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, null, List.of(), 2, 5)));
+		assertEquals(HttpStatus.BAD_REQUEST, tooMany.getStatus());
+>>>>>>> 306880a (fix(server): check multi-room bookings against bookable units)
 	}
 
 	private CreateBookingRequest request(
@@ -241,12 +264,22 @@ class BookingServiceImplTest {
 			BookingPaymentMethod method,
 			String promo,
 			List<String> extras) {
+		return request(roomId, method, promo, extras, 1, 2);
+	}
+
+	private CreateBookingRequest request(
+			UUID roomId,
+			BookingPaymentMethod method,
+			String promo,
+			List<String> extras,
+			int rooms,
+			int guests) {
 		return new CreateBookingRequest(
 				roomId,
 				LocalDate.now().plusDays(2),
 				LocalDate.now().plusDays(3),
-				2,
-				1,
+				guests,
+				rooms,
 				"Kate",
 				"Cho",
 				"kate@example.com",
@@ -267,7 +300,7 @@ class BookingServiceImplTest {
 		roomType.setPricePerNight(price);
 		roomType.setPromotionPrice(promoPrice);
 		roomType.setCapacity(2);
-		roomType.setTotalUnits(4);
+		when(roomTypeRepository.countBookableUnits(eq(roomType.getId()), any())).thenReturn(4L);
 		when(promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrue("NEATLYNEW400"))
 				.thenReturn(Optional.of(promo()));
 		return roomType;

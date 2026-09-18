@@ -63,6 +63,17 @@ public interface RoomTypeRepository extends JpaRepository<RoomType, UUID> {
 			@Param("holdingStatuses") Collection<BookingStatus> holdingStatuses,
 			@Param("blockedStatuses") Collection<String> blockedStatuses);
 
+	/** Units of a room type that can be sold: not deleted and not in {@code blockedStatuses}. */
+	@Query("""
+			select count(u) from RoomUnit u
+			where u.roomType.id = :roomTypeId
+			  and u.deletedAt is null
+			  and u.roomStatus.code not in :blockedStatuses
+			""")
+	long countBookableUnits(
+			@Param("roomTypeId") UUID roomTypeId,
+			@Param("blockedStatuses") Collection<String> blockedStatuses);
+
 	@EntityGraph(attributePaths = "images")
 	List<RoomType> findByIdIn(Collection<UUID> ids);
 

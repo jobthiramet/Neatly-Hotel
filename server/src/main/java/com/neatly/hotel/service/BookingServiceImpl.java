@@ -93,7 +93,7 @@ public class BookingServiceImpl implements BookingService {
 	public BookingResponse create(String clerkUserId, CreateBookingRequest request) {
 		RoomType roomType = roomTypeRepository.findByIdAndDeletedAtIsNull(request.roomTypeId())
 				.orElseThrow(() -> new ResourceNotFoundException("Room not found: " + request.roomTypeId()));
-		if (request.guests() > roomType.getCapacity()) {
+		if (request.guests() > roomType.getCapacity() * request.rooms()) {
 			throw new ApiException("Guest count exceeds room capacity", HttpStatus.BAD_REQUEST);
 		}
 		assertAvailable(roomType, request.checkIn(), request.checkOut(), request.rooms(), null);
@@ -410,8 +410,10 @@ public class BookingServiceImpl implements BookingService {
 	}
 
 	private void assertAvailable(RoomType roomType, LocalDate checkIn, LocalDate checkOut, int rooms, UUID excludeId) {
+		// Same inventory as GET /api/rooms/available: bookable room units, not room_types.total_units.
+		long bookable = roomTypeRepository.countBookableUnits(roomType.getId(), RoomAvailabilityServiceImpl.BLOCKED_STATUSES);
 		long occupied = bookingRepository.occupiedUnits(roomType.getId(), checkIn, checkOut, Instant.now(), excludeId, OCCUPYING);
-		if (occupied + rooms > roomType.getTotalUnits()) {
+		if (occupied + rooms > bookable) {
 			throw new ApiException("This room type is not available for the selected dates", HttpStatus.CONFLICT);
 		}
 	}

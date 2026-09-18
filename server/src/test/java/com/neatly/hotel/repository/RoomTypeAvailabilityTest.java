@@ -77,6 +77,8 @@ class RoomTypeAvailabilityTest {
 	@Test
 	void noBookingsCountsBookableUnitsAndSkipsDeletedTypes() {
 		assertEquals(Map.of(twin.getId(), 3L, family.getId(), 1L), available(1, 1));
+		// checkout counts the same inventory
+		assertEquals(3L, repository.countBookableUnits(twin.getId(), BLOCKED));
 	}
 
 	@Test
