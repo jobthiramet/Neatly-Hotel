@@ -3,7 +3,6 @@
 export const chatbotGreeting
   = 'Welcome to Neatly Hotel! 🌟 I\'m your virtual assistant. Choose a topic you\'d like to know more about. I\'m here to help! 😊'
 
-// Stored for round 3 (typed send / unknown topics). Unused in round 2.
 export const chatbotAutoReply
   = 'Thanks for reaching out to us! If you need any more help, just give us a call at 020872345 we\'re happy to assist you! 🧡'
 
@@ -12,11 +11,37 @@ export type ChatbotPaymentOption = {
   detail: string
 }
 
+export type ChatbotCta = {
+  text: string
+  actionLabel: string
+  to: string
+  query?: Record<string, string>
+}
+
+export const chatbotGuestBookingCta: ChatbotCta = {
+  text: 'Please log in to start a booking. 🧡',
+  actionLabel: 'Log in',
+  to: '/sign-in',
+}
+
+export const chatbotGuestCancelCta: ChatbotCta = {
+  text: 'Please log in to cancel a booking. 🧡',
+  actionLabel: 'Log in',
+  to: '/sign-in',
+  query: { redirect_url: '/booking-history' },
+}
+
+export const chatbotSignedInCancelCta: ChatbotCta = {
+  text: 'You can cancel a booking from your booking history. 🧡',
+  actionLabel: 'Booking History',
+  to: '/booking-history',
+}
+
 export type ChatbotTopic
   = {
     id: 'cancel-booking'
     label: 'Cancel Booking'
-    enabled: false
+    enabled: true
   }
   | {
     id: 'check-in-out'
@@ -86,7 +111,7 @@ export const chatbotTopics: ChatbotTopic[] = [
   {
     id: 'cancel-booking',
     label: 'Cancel Booking',
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'promotion',
@@ -97,3 +122,9 @@ export const chatbotTopics: ChatbotTopic[] = [
     actionLabel: 'Book Now',
   },
 ]
+
+export function findChatbotTopic(text: string): ChatbotTopic | undefined {
+  const needle = text.trim().toLowerCase()
+  if (!needle) return undefined
+  return chatbotTopics.find(topic => topic.label.toLowerCase() === needle)
+}

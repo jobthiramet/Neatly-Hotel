@@ -1,12 +1,24 @@
 <!-- Figma: bottomsheet-chatbot (13259:21785) + FAB (13220:4990) -->
 <script setup lang="ts">
+import { useAuth } from '@clerk/vue'
 import { onKeyStroke } from '@vueuse/core'
-import { nextTick, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { IconChat, IconClose } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { chatbotGreeting, chatbotTopics, type ChatbotPaymentOption, type ChatbotTopic } from '@/data/chatbot'
+import {
+  chatbotAutoReply,
+  chatbotGreeting,
+  chatbotGuestBookingCta,
+  chatbotGuestCancelCta,
+  chatbotSignedInCancelCta,
+  chatbotTopics,
+  findChatbotTopic,
+  type ChatbotCta,
+  type ChatbotPaymentOption,
+  type ChatbotTopic,
+} from '@/data/chatbot'
 import { roomDetails } from '@/data/rooms'
 import { cn } from '@/lib/utils'
 
@@ -15,10 +27,14 @@ type ChatMessage
   | { id: number, role: 'bot', kind: 'message', text: string }
   | { id: number, role: 'bot', kind: 'room-type', title: string, actionLabel: string }
   | { id: number, role: 'bot', kind: 'option-with-details', title: string, options: ChatbotPaymentOption[] }
+  | { id: number, role: 'bot', kind: 'cta', text: string, actionLabel: string, to: string, query?: Record<string, string> }
 
 const route = useRoute()
+const { isLoaded, isSignedIn } = useAuth()
+const signedIn = computed(() => Boolean(isLoaded.value && isSignedIn.value))
 const open = ref(false)
 const draft = ref('')
+const canSend = computed(() => Boolean(draft.value.trim()))
 const messages = ref<ChatMessage[]>([])
 let nextMessageId = 1
 const rooms = Object.values(roomDetails)
@@ -53,19 +69,38 @@ function closePanel() {
   void nextTick(() => fabButton.value?.focus())
 }
 
-function handleSubmit() {
-  // Round 2: the composer is still visual only. Sending is round 3.
+function pushCta(cta: ChatbotCta) {
+  messages.value.push({
+    id: nextMessageId++,
+    role: 'bot',
+    kind: 'cta',
+    text: cta.text,
+    actionLabel: cta.actionLabel,
+    to: cta.to,
+    query: cta.query,
+  })
 }
 
-function selectTopic(topic: ChatbotTopic) {
-  if (!topic.enabled) return
+function replyToTopic(topic: ChatbotTopic) {
+  if (topic.id === 'cancel-booking') {
+    pushCta(signedIn.value ? chatbotSignedInCancelCta : chatbotGuestCancelCta)
+    return
+  }
 
-  messages.value.push({ id: nextMessageId++, role: 'user', text: topic.label })
+  if (topic.id === 'booking' && !signedIn.value) {
+    pushCta({
+      ...chatbotGuestBookingCta,
+      query: { redirect_url: route.fullPath },
+    })
+    return
+  }
 
   if (topic.format === 'message') {
     messages.value.push({ id: nextMessageId++, role: 'bot', kind: 'message', text: topic.text })
+    return
   }
-  else if (topic.format === 'room-type') {
+
+  if (topic.format === 'room-type') {
     messages.value.push({
       id: nextMessageId++,
       role: 'bot',
@@ -73,14 +108,41 @@ function selectTopic(topic: ChatbotTopic) {
       title: topic.title,
       actionLabel: topic.actionLabel,
     })
+    return
   }
+
+  messages.value.push({
+    id: nextMessageId++,
+    role: 'bot',
+    kind: 'option-with-details',
+    title: topic.title,
+    options: topic.options,
+  })
+}
+
+function selectTopic(topic: ChatbotTopic) {
+  if (!topic.enabled) return
+
+  messages.value.push({ id: nextMessageId++, role: 'user', text: topic.label })
+  replyToTopic(topic)
+  scrollToLatest()
+}
+
+function handleSubmit() {
+  const text = draft.value.trim()
+  if (!text) return
+
+  draft.value = ''
+  messages.value.push({ id: nextMessageId++, role: 'user', text })
+
+  const topic = findChatbotTopic(text)
+  if (topic) replyToTopic(topic)
   else {
     messages.value.push({
       id: nextMessageId++,
       role: 'bot',
-      kind: 'option-with-details',
-      title: topic.title,
-      options: topic.options,
+      kind: 'message',
+      text: chatbotAutoReply,
     })
   }
 
@@ -162,7 +224,7 @@ onUnmounted(() => {
           aria-relevant="additions"
           class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-bg px-4 py-6"
         >
-          <p class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700">
+          <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700 lg:max-w-150">
             {{ chatbotGreeting }}
           </p>
 
@@ -173,20 +235,20 @@ onUnmounted(() => {
           >
             <p
               v-if="message.role === 'user'"
-              class="ml-auto max-w-63.75 lg:max-w-150 rounded-sm bg-orange-500 px-4 py-2 text-body1 text-white"
+              class="ml-auto max-w-63.75 rounded-sm bg-orange-500 px-4 py-2 text-body1 text-white lg:max-w-150"
             >
               {{ message.text }}
             </p>
 
             <p
               v-else-if="message.kind === 'message'"
-              class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700"
+              class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700 lg:max-w-150"
             >
               {{ message.text }}
             </p>
 
             <template v-else-if="message.kind === 'room-type'">
-              <p class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+              <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700 lg:max-w-150">
                 {{ message.title }}
               </p>
               <ul class="flex flex-col gap-3">
@@ -219,8 +281,22 @@ onUnmounted(() => {
               </ul>
             </template>
 
+            <div
+              v-else-if="message.kind === 'cta'"
+              class="flex max-w-63.75 flex-col gap-2 lg:max-w-150"
+            >
+              <p class="rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+                {{ message.text }}
+              </p>
+              <Button as-child class="w-full">
+                <RouterLink :to="{ path: message.to, query: message.query }">
+                  {{ message.actionLabel }}
+                </RouterLink>
+              </Button>
+            </div>
+
             <template v-else>
-              <p class="max-w-63.75 lg:max-w-150 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+              <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700 lg:max-w-150">
                 {{ message.title }}
               </p>
               <ul class="flex flex-col gap-2">
@@ -273,7 +349,8 @@ onUnmounted(() => {
           <button
             type="submit"
             aria-label="Send message"
-            class="flex size-6 shrink-0 items-center justify-center text-orange-500 outline-none is-focus:ring-2 is-focus:ring-ring"
+            :disabled="!canSend"
+            class="flex size-6 shrink-0 items-center justify-center text-orange-500 outline-none is-focus:ring-2 is-focus:ring-ring disabled:cursor-not-allowed disabled:text-gray-500"
           >
             <svg
               class="size-6"
