@@ -531,6 +531,39 @@ Create a new Stripe Checkout Session for an unpaid card booking (`PENDING_PAYMEN
 - Response `200`: `ApiResponse<BookingResponse>` with a fresh `clientSecret`
 - Errors: `400` not a card booking, or status cannot be paid; `401`; `404`; `409` no remaining units; `502` / `503` Stripe
 
+#### `POST /api/bookings/{id}/cancel`
+
+Cancel a `CONFIRMED` booking owned by the signed-in user. `cancelledAt` is set to now. Inventory is released by the existing `booking_rooms` trigger.
+
+Refunds are decided on the server (the client does not send a refund flag):
+
+- Full refund when check-in is more than 24 hours away, counted from 14:00 `Asia/Bangkok`
+- No refund when check-in is within 24 hours
+- **Stripe** with a `SUCCEEDED` charge: create a Stripe refund of `grandTotal`, then insert a `payments` row (`kind` `REFUND`, `stripe_refund_id`)
+- **Cash** or unpaid: cancel only; no money is moved
+- Stripe refund failure returns `502` and the booking stays `CONFIRMED`
+
+- Auth: Clerk session token
+- Body: none
+- Response `200`: `ApiResponse<BookingResponse>` with `message: "Booking cancelled"`
+- Errors: `400` status is not `CONFIRMED`; `401`; `404`; `502` Stripe refund failed; `503` `STRIPE_SECRET_KEY` missing when a card refund is required
+
+#### `PATCH /api/bookings/{id}/dates`
+
+Change check-in and check-out of a `CONFIRMED` booking within 24 hours of `createdAt`. Price is not recalculated. The new stay must keep exactly the original number of nights, so only the dates move. Availability reuses the same occupancy check as checkout, excluding this booking.
+
+`ChangeBookingDatesRequest`:
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `checkIn` | date | yes | ISO-8601 date |
+| `checkOut` | date | yes | must be after `checkIn` (`stayValid`) |
+
+- Auth: Clerk session token
+- Body: `ChangeBookingDatesRequest`
+- Response `200`: `ApiResponse<BookingResponse>` with `message: "Booking dates updated"`
+- Errors: `400` outside the 24-hour window, not `CONFIRMED`, or a different number of nights than the original; `401`; `404`; `409` no remaining units for the new dates
+
 #### `POST /api/stripe/webhooks`
 
 Stripe event receiver. Not wrapped in `ApiResponse`. Hidden from Swagger.
@@ -547,6 +580,11 @@ Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
+
+### 2026-09-18
+
+- Added authenticated `POST /api/bookings/{id}/cancel` (full Stripe refund when check-in is more than 24 hours away; cash/unpaid bookings are cancelled only).
+- Added authenticated `PATCH /api/bookings/{id}/dates` (within 24 hours of booking; new stay must keep the original number of nights; price unchanged).
 
 ### 2026-09-17
 

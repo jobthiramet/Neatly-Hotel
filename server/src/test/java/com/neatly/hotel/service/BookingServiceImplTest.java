@@ -1,17 +1,22 @@
 package com.neatly.hotel.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,11 +26,16 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
+import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.model.Booking;
 import com.neatly.hotel.model.BookingPaymentMethod;
+import com.neatly.hotel.model.BookingRoom;
 import com.neatly.hotel.model.BookingStatus;
+import com.neatly.hotel.model.Payment;
+import com.neatly.hotel.model.PaymentKind;
+import com.neatly.hotel.model.PaymentProvider;
 import com.neatly.hotel.model.PaymentStatus;
 import com.neatly.hotel.model.PromotionCode;
 import com.neatly.hotel.model.RoomType;
@@ -93,6 +103,139 @@ class BookingServiceImplTest {
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
 	}
 
+	@Test
+	void cancelRefundsPaidStripeWhenCheckInIsMoreThan24HoursAway() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.STRIPE, Instant.now().minus(Duration.ofHours(2)), bangkokToday().plusDays(4));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+		when(stripe.refund("pi_abc", new BigDecimal("2500.00"))).thenReturn("re_abc");
+
+		var response = service.cancel("user_abc", booking.getId());
+
+		assertEquals(BookingStatus.CANCELLED, response.status());
+		assertNotNull(response.cancelledAt());
+		verify(stripe).refund("pi_abc", new BigDecimal("2500.00"));
+		assertEquals(PaymentKind.REFUND, booking.getPayments().get(1).getKind());
+		assertEquals("re_abc", booking.getPayments().get(1).getStripeRefundId());
+	}
+
+	@Test
+	void cancelDoesNotRefundWhenCheckInIsWithin24Hours() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.STRIPE, Instant.now().minus(Duration.ofHours(2)), bangkokToday());
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		var response = service.cancel("user_abc", booking.getId());
+
+		assertEquals(BookingStatus.CANCELLED, response.status());
+		verify(stripe, never()).refund(any(), any());
+		assertEquals(1, booking.getPayments().size());
+	}
+
+	@Test
+	void cancelCashSkipsStripe() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now().minus(Duration.ofHours(2)), bangkokToday().plusDays(4));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		var response = service.cancel("user_abc", booking.getId());
+
+		assertEquals(BookingStatus.CANCELLED, response.status());
+		verify(stripe, never()).refund(any(), any());
+	}
+
+	@Test
+	void cancelLeavesBookingConfirmedWhenStripeRefundFails() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.STRIPE, Instant.now().minus(Duration.ofHours(2)), bangkokToday().plusDays(4));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+		when(stripe.refund(any(), any())).thenThrow(new ApiException("Could not refund this payment", HttpStatus.BAD_GATEWAY));
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.cancel("user_abc", booking.getId()));
+
+		assertEquals(HttpStatus.BAD_GATEWAY, exception.getStatus());
+		assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
+		assertNull(booking.getCancelledAt());
+	}
+
+	@Test
+	void cancelRejectsWhenAlreadyCancelled() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now(), bangkokToday().plusDays(4));
+		booking.setStatus(BookingStatus.CANCELLED);
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.cancel("user_abc", booking.getId()));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+	}
+
+	@Test
+	void changeDatesUpdatesStayWithin24HoursOfBooking() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now().minus(Duration.ofHours(1)), bangkokToday().plusDays(4));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+		when(bookingRepository.occupiedUnits(eq(booking.getRoomType().getId()), any(), any(), any(), eq(booking.getId()), any()))
+				.thenReturn(0L);
+
+		LocalDate checkIn = bangkokToday().plusDays(6);
+		var response = service.changeDates("user_abc", booking.getId(), new ChangeBookingDatesRequest(checkIn, checkIn.plusDays(1)));
+
+		assertEquals(checkIn, response.checkIn());
+		assertEquals(checkIn.plusDays(1), response.checkOut());
+		assertEquals(new BigDecimal("2500.00"), response.grandTotal());
+	}
+
+	@Test
+	void changeDatesRejectsAfter24Hours() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now().minus(Duration.ofHours(25)), bangkokToday().plusDays(4));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> service.changeDates(
+						"user_abc",
+						booking.getId(),
+						new ChangeBookingDatesRequest(bangkokToday().plusDays(6), bangkokToday().plusDays(7))));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		verify(bookingRepository, never()).occupiedUnits(any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void changeDatesRejectsLongerStay() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now().minus(Duration.ofHours(1)), bangkokToday().plusDays(4));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> service.changeDates(
+						"user_abc",
+						booking.getId(),
+						new ChangeBookingDatesRequest(bangkokToday().plusDays(6), bangkokToday().plusDays(8))));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+	}
+
+	@Test
+	void changeDatesRejectsShorterStay() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now().minus(Duration.ofHours(1)), bangkokToday().plusDays(4));
+		booking.setCheckOut(booking.getCheckIn().plusDays(2));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		LocalDate checkIn = bangkokToday().plusDays(6);
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> service.changeDates("user_abc", booking.getId(), new ChangeBookingDatesRequest(checkIn, checkIn.plusDays(1))));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		verify(bookingRepository, never()).occupiedUnits(any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void changeDatesRejectsWhenRoomIsUnavailable() {
+		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now().minus(Duration.ofHours(1)), bangkokToday().plusDays(4));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+		when(bookingRepository.occupiedUnits(eq(booking.getRoomType().getId()), any(), any(), any(), eq(booking.getId()), any()))
+				.thenReturn(4L);
+
+		LocalDate checkIn = bangkokToday().plusDays(6);
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> service.changeDates("user_abc", booking.getId(), new ChangeBookingDatesRequest(checkIn, checkIn.plusDays(1))));
+		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+	}
+
 	private CreateBookingRequest request(
 			UUID roomId,
 			BookingPaymentMethod method,
@@ -136,5 +279,54 @@ class BookingServiceImplTest {
 		promo.setAmountOff(new BigDecimal("400.00"));
 		promo.setActive(true);
 		return promo;
+	}
+
+	private Booking confirmedBooking(BookingPaymentMethod method, Instant createdAt, LocalDate checkIn) {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		Booking booking = new Booking();
+		booking.setId(UUID.fromString("00000000-0000-0000-0002-000000000001"));
+		booking.setUserId("user_abc");
+		booking.setBookingNumber("NTESTBOOKING001");
+		booking.setStatus(BookingStatus.CONFIRMED);
+		booking.setPaymentMethod(method);
+		booking.setCreatedAt(createdAt);
+		booking.setUpdatedAt(createdAt);
+		booking.setCheckIn(checkIn);
+		booking.setCheckOut(checkIn.plusDays(1));
+		booking.setGuests(2);
+		booking.setGuestFirstName("Kate");
+		booking.setGuestLastName("Cho");
+		booking.setGuestEmail("kate@example.com");
+		booking.setGuestPhone("0812345678");
+		booking.setGuestCountry("Thailand");
+		booking.setGuestDateOfBirth(LocalDate.of(1990, 1, 1));
+		booking.setStandardRequests("[]");
+		booking.setCurrency("THB");
+		booking.setRoomSubtotal(new BigDecimal("2500.00"));
+		booking.setExtrasTotal(BigDecimal.ZERO);
+		booking.setDiscountTotal(BigDecimal.ZERO);
+		booking.setGrandTotal(new BigDecimal("2500.00"));
+		booking.setRoomNameSnapshot("Superior Garden View");
+		BookingRoom room = new BookingRoom();
+		room.setBooking(booking);
+		room.setRoomType(roomType);
+		room.setPricePerNight(new BigDecimal("2500.00"));
+		booking.getRooms().add(room);
+		Payment charge = new Payment();
+		charge.setBooking(booking);
+		charge.setProvider(method == BookingPaymentMethod.STRIPE ? PaymentProvider.STRIPE : PaymentProvider.CASH);
+		charge.setKind(PaymentKind.CHARGE);
+		charge.setStatus(method == BookingPaymentMethod.STRIPE ? PaymentStatus.SUCCEEDED : PaymentStatus.UNPAID);
+		charge.setAmount(booking.getGrandTotal());
+		charge.setCurrency("THB");
+		if (method == BookingPaymentMethod.STRIPE) {
+			charge.setStripePaymentIntentId("pi_abc");
+		}
+		booking.getPayments().add(charge);
+		return booking;
+	}
+
+	private static LocalDate bangkokToday() {
+		return LocalDate.now(ZoneId.of("Asia/Bangkok"));
 	}
 }

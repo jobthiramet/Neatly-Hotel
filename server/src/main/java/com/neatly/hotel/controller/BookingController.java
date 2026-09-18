@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.neatly.hotel.dto.ApiResponse;
 import com.neatly.hotel.dto.BookingResponse;
+import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
 import com.neatly.hotel.dto.PageResponse;
 import com.neatly.hotel.service.BookingService;
@@ -70,5 +72,22 @@ public class BookingController {
 			@AuthenticationPrincipal Jwt jwt,
 			@PathVariable UUID id) {
 		return ApiResponse.ok(bookingService.retryPayment(jwt.getSubject(), id));
+	}
+
+	@PostMapping("/{id}/cancel")
+	@Operation(summary = "Cancel a confirmed booking", description = "Refunds a paid card booking when check-in is more than 24 hours away (14:00 Asia/Bangkok). Cash bookings are cancelled without moving money.")
+	public ApiResponse<BookingResponse> cancel(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable UUID id) {
+		return ApiResponse.ok("Booking cancelled", bookingService.cancel(jwt.getSubject(), id));
+	}
+
+	@PatchMapping("/{id}/dates")
+	@Operation(summary = "Change check-in and check-out dates", description = "Allowed within 24 hours of booking. The new stay must keep the original number of nights. Price is unchanged.")
+	public ApiResponse<BookingResponse> changeDates(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable UUID id,
+			@Valid @RequestBody ChangeBookingDatesRequest request) {
+		return ApiResponse.ok("Booking dates updated", bookingService.changeDates(jwt.getSubject(), id, request));
 	}
 }

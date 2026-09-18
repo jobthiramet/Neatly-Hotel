@@ -19,9 +19,11 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
+import com.stripe.model.Refund;
 import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
+import com.stripe.param.RefundCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import com.stripe.param.checkout.SessionRetrieveParams;
 
@@ -105,6 +107,21 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 		} catch (StripeException ex) {
 			log.warn("Stripe session retrieve failed: {}", ex.getMessage());
 			throw new ApiException("Could not read payment status", HttpStatus.BAD_GATEWAY);
+		}
+	}
+
+	@Override
+	public String refund(String paymentIntentId, BigDecimal amount) {
+		requireSecret();
+		try {
+			Refund refund = client().v1().refunds().create(RefundCreateParams.builder()
+					.setPaymentIntent(paymentIntentId)
+					.setAmount(toStripeAmount(amount))
+					.build());
+			return refund.getId();
+		} catch (StripeException ex) {
+			log.warn("Stripe refund failed: {}", ex.getMessage());
+			throw new ApiException("Could not refund this payment", HttpStatus.BAD_GATEWAY);
 		}
 	}
 
