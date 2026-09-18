@@ -3,10 +3,12 @@ package com.neatly.hotel.controller;
 import java.util.List;
 import java.util.UUID;
 
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -19,11 +21,14 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.neatly.hotel.dto.ApiResponse;
+import com.neatly.hotel.dto.AvailableRoomResponse;
 import com.neatly.hotel.dto.PageResponse;
 import com.neatly.hotel.dto.ReorderRoomImagesRequest;
+import com.neatly.hotel.dto.RoomAvailabilityQuery;
 import com.neatly.hotel.dto.RoomRequest;
 import com.neatly.hotel.dto.RoomResponse;
 import com.neatly.hotel.dto.RoomSummaryResponse;
+import com.neatly.hotel.service.RoomAvailabilityService;
 import com.neatly.hotel.service.RoomTypeService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,9 +41,11 @@ import jakarta.validation.Valid;
 public class RoomController {
 
 	private final RoomTypeService roomService;
+	private final RoomAvailabilityService availabilityService;
 
-	public RoomController(RoomTypeService roomService) {
+	public RoomController(RoomTypeService roomService, RoomAvailabilityService availabilityService) {
 		this.roomService = roomService;
+		this.availabilityService = availabilityService;
 	}
 
 	@GetMapping
@@ -51,6 +58,18 @@ public class RoomController {
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "10") int size) {
 		return ApiResponse.ok(roomService.list(search, page, size));
+	}
+
+	@GetMapping("/available")
+	@Operation(
+			summary = "Search available room types",
+			description = "Public. Room types with at least `rooms` bookable units free for the whole stay "
+					+ "[checkIn, checkOut) and `capacity × rooms ≥ guests`. A checkout day can be another stay's "
+					+ "check-in day. Dates are ISO (YYYY-MM-DD); checkIn must not be before today in hotel time "
+					+ "(Asia/Bangkok); stays are capped at 30 nights. Empty list when nothing is available. "
+					+ "Rate limited per IP (429 + Retry-After).")
+	public ApiResponse<List<AvailableRoomResponse>> available(@ParameterObject @Valid @ModelAttribute RoomAvailabilityQuery query) {
+		return ApiResponse.ok(availabilityService.search(query));
 	}
 
 	@GetMapping("/{id}")

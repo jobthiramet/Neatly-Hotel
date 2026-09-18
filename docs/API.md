@@ -177,6 +177,44 @@ List non-deleted rooms, newest first.
 }
 ```
 
+#### `GET /api/rooms/available`
+
+Search Result page: room types that can be booked for a stay.
+
+- Auth: none
+- Query params (all required):
+
+| Param | Type | Validation |
+| --- | --- | --- |
+| `checkIn` | date `YYYY-MM-DD` | Not before today in hotel time (`app.hotel.time-zone`, default `Asia/Bangkok`) |
+| `checkOut` | date `YYYY-MM-DD` | After `checkIn` (field error `checkOutValid`); stay at most `app.search.max-nights` (default 30) nights |
+| `rooms` | integer | 1–10 |
+| `guests` | integer | 1–6 |
+
+- Availability rules:
+  - **Bookable units** of a room type: non-deleted `room_units` whose status is not `OUT_OF_ORDER` or `OUT_OF_SERVICE`. Housekeeping statuses (clean, dirty, inspected, …) don't affect future stays.
+  - **Booked units**: `booking_rooms` rows of that type whose booking overlaps the stay (`booking.check_in < checkOut AND booking.check_out > checkIn`) and is `CONFIRMED`, `CHECKED_IN`, or `PENDING_PAYMENT` with an unexpired hold. A checkout day can be another stay's check-in day. Bookings are counted per room type because `room_unit_id` stays null until a unit is assigned.
+  - A room type is returned when `bookable − booked ≥ rooms` and `capacity × rooms ≥ guests`. Soft-deleted room types never appear.
+- Response `200`: `ApiResponse<AvailableRoomResponse[]>`, cheapest `pricePerNight` first. **Empty array (not `404`) when nothing is available.**
+
+`AvailableRoomResponse`: the `RoomSummaryResponse` fields plus `description` (string) and `availableUnits` (integer).
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": [
+    { "id": "3f2c1b9e-7a4d-4c8e-9b1a-2d5e6f7a8b9c", "name": "Superior Garden View", "mainImageUrl": "https://<project>.supabase.co/storage/v1/object/public/room-images/rooms/3f2c.../a1b2....jpg", "pricePerNight": 3100.00, "promotionPrice": 2500.00, "capacity": 2, "bedType": "DOUBLE", "sizeSqm": 32, "description": "Rooms (36sqm) with full garden views, ...", "availableUnits": 8 }
+  ],
+  "timestamp": "2026-09-18T07:06:56.345Z"
+}
+```
+
+- Errors:
+  - `400` `Validation failed` with field `details`, e.g. `["checkOutValid: check-out must be after check-in", "rooms: must be greater than or equal to 1"]`. A missing param gives `must not be null`; a non-ISO date gives `checkIn: invalid value`.
+  - `400` with `message` `checkIn: must not be in the past (hotel time, Asia/Bangkok)` or `checkOut: stay must be at most 30 nights` (`details` empty).
+  - `429` rate limit (same limit and body as `GET /api/rooms`).
+
 #### `GET /api/rooms/{id}`
 
 - Auth: none
@@ -585,6 +623,8 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 - Added authenticated `POST /api/bookings/{id}/cancel` (full Stripe refund when check-in is more than 24 hours away; cash/unpaid bookings are cancelled only).
 - Added authenticated `PATCH /api/bookings/{id}/dates` (within 24 hours of booking; new stay must keep the original number of nights; price unchanged).
+- Added public `GET /api/rooms/available?checkIn&checkOut&rooms&guests` for the Search Result page. Counts bookable `room_units` minus overlapping active bookings per room type; rate limited like `GET /api/rooms`. Checkout (`POST /api/bookings`) still checks `room_types.total_units`, so the two can disagree until checkout uses the same rule.
+- `400 Validation failed` details for a query param of the wrong type (bound to a request object) now read `<field>: invalid value` instead of the Java conversion message (all endpoints).
 
 ### 2026-09-17
 

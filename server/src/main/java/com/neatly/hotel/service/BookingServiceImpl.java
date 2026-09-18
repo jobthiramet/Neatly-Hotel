@@ -49,7 +49,8 @@ import com.neatly.hotel.repository.StripeWebhookEventRepository;
 @Transactional
 public class BookingServiceImpl implements BookingService {
 
-	private static final List<BookingStatus> OCCUPYING = List.of(
+	/** Bookings in these statuses hold their rooms (pending ones only until the hold expires). */
+	static final List<BookingStatus> OCCUPYING = List.of(
 			BookingStatus.PENDING_PAYMENT,
 			BookingStatus.CONFIRMED,
 			BookingStatus.CHECKED_IN);

@@ -29,7 +29,8 @@ public class GlobalExceptionHandler {
 			MethodArgumentNotValidException ex,
 			HttpServletRequest request) {
 		List<String> details = ex.getBindingResult().getFieldErrors().stream()
-				.map(error -> error.getField() + ": " + error.getDefaultMessage())
+				// Type conversion failures (e.g. a malformed date query param) would otherwise leak Java type names.
+				.map(error -> error.getField() + ": " + (error.isBindingFailure() ? "invalid value" : error.getDefaultMessage()))
 				.toList();
 		return build(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), details);
 	}
