@@ -33,4 +33,6 @@ public interface StripeCheckoutGateway {
 	SessionView retrieveSession(String checkoutSessionId);
 
 	WebhookEvent parseEvent(String payload, String signature);
+
+	String refund(String paymentIntentId, BigDecimal amount);
 }

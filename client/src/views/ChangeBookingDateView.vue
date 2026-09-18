@@ -1,10 +1,10 @@
 <!-- Figma: change date (76:1749 desktop, 7423:4415 mobile) -->
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date'
-import { DateFormatter, getLocalTimeZone, parseDate } from '@internationalized/date'
+import { DateFormatter, getLocalTimeZone } from '@internationalized/date'
+import { useAuth } from '@clerk/vue'
 import { computed, ref, shallowRef, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
-import roomImage from '@/assets/home/room-superior-garden-view.webp'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
@@ -19,18 +19,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { FormField } from '@/components/ui/form-field'
-
-interface MockBooking {
-  id: string
-  roomName: string
-  roomImage: string
-  roomImageAlt: string
-  bookedAt: DateValue
-  checkIn: DateValue
-  checkOut: DateValue
-}
+import { nightsBetween } from '@/data/booking'
+import { apiErrorMessage } from '@/stores/hotel'
+import { useBookingStore } from '@/stores/booking'
 
 const route = useRoute()
+const router = useRouter()
+const { getToken, isLoaded } = useAuth()
+const bookingStore = useBookingStore()
 const formatter = new DateFormatter('en-GB', {
   weekday: 'short',
   day: 'numeric',
@@ -38,77 +34,137 @@ const formatter = new DateFormatter('en-GB', {
   year: 'numeric',
 })
 
-const booking: MockBooking = {
-  id: String(route.params.bookingId),
-  roomName: 'Superior Garden View',
-  roomImage,
-  roomImageAlt: 'Superior Garden View room overlooking the mountains',
-  bookedAt: parseDate('2026-10-16'),
-  checkIn: parseDate('2026-10-19'),
-  checkOut: parseDate('2026-10-22'),
-}
+const bookingId = computed(() => String(route.params.bookingId || ''))
+const booking = computed(() => bookingStore.getBooking(bookingId.value))
 
-const checkIn = shallowRef<DateValue>(booking.checkIn)
-const checkOut = shallowRef<DateValue>(booking.checkOut)
+const loading = ref(true)
+const error = ref('')
+const checkIn = shallowRef<DateValue>()
+const checkOut = shallowRef<DateValue>()
+const originalCheckIn = shallowRef<DateValue>()
+const originalCheckOut = shallowRef<DateValue>()
 const confirmationOpen = ref(false)
 const isSaving = ref(false)
-const successMessage = ref('')
 
-function formatDate(value: DateValue) {
+function formatDate(value: DateValue | undefined) {
+  if (!value)
+    return ''
   return formatter.format(value.toDate(getLocalTimeZone()))
 }
 
-function nightsBetween(start: DateValue, end: DateValue) {
-  const millisecondsPerDay = 86_400_000
-  return Math.round(
-    (end.toDate('UTC').getTime() - start.toDate('UTC').getTime()) / millisecondsPerDay,
-  )
-}
-
-const originalNights = nightsBetween(booking.checkIn, booking.checkOut)
-const minimumCheckOut = computed(() => checkIn.value.add({ days: 1 }))
-const maximumCheckOut = computed(() => checkIn.value.add({ days: originalNights }))
+const originalNights = computed(() => {
+  if (!originalCheckIn.value || !originalCheckOut.value)
+    return 1
+  return nightsBetween(originalCheckIn.value, originalCheckOut.value)
+})
+const requiredCheckOut = computed(() => checkIn.value?.add({ days: originalNights.value }))
 
 const dateError = computed(() => {
-  if (checkOut.value.compare(checkIn.value) <= 0) {
-    return 'Check-out must be after check-in.'
-  }
-
-  if (nightsBetween(checkIn.value, checkOut.value) > originalNights) {
-    return `The new stay cannot exceed ${originalNights} nights.`
-  }
-
+  if (!checkIn.value || !checkOut.value)
+    return ''
+  if (nightsBetween(checkIn.value, checkOut.value) !== originalNights.value)
+    return `The new stay must keep the same ${originalNights.value === 1 ? 'night' : `${originalNights.value} nights`}.`
   return ''
 })
 
 const hasChanged = computed(() =>
-  checkIn.value.compare(booking.checkIn) !== 0
-  || checkOut.value.compare(booking.checkOut) !== 0,
+  !!checkIn.value
+  && !!checkOut.value
+  && !!originalCheckIn.value
+  && !!originalCheckOut.value
+  && (checkIn.value.compare(originalCheckIn.value) !== 0
+    || checkOut.value.compare(originalCheckOut.value) !== 0),
 )
-const canSubmit = computed(() => hasChanged.value && !dateError.value && !isSaving.value)
+const canSubmit = computed(() =>
+  hasChanged.value
+  && !dateError.value
+  && !isSaving.value
+  && booking.value?.status === 'within-24h',
+)
 
 watch([checkIn, checkOut], () => {
-  successMessage.value = ''
+  error.value = ''
 })
 
-function requestConfirmation() {
-  if (!canSubmit.value) {
+// The stay length is fixed, so check-out always follows check-in.
+watch(checkIn, () => {
+  if (requiredCheckOut.value)
+    checkOut.value = requiredCheckOut.value
+})
+
+async function sessionToken() {
+  const tokenFn = getToken.value
+  return typeof tokenFn === 'function' ? await tokenFn() : null
+}
+
+async function loadBooking() {
+  loading.value = true
+  error.value = ''
+  const token = await sessionToken()
+  if (!token) {
+    loading.value = false
+    error.value = 'Please sign in to view this booking.'
     return
   }
+  try {
+    await bookingStore.loadOne(token, bookingId.value)
+    const loaded = bookingStore.getBooking(bookingId.value)
+    if (loaded) {
+      originalCheckIn.value = loaded.checkIn.date
+      originalCheckOut.value = loaded.checkOut.date
+      checkIn.value = loaded.checkIn.date
+      checkOut.value = loaded.checkOut.date
+    }
+  }
+  catch (cause) {
+    error.value = apiErrorMessage(cause, 'Could not load this booking.')
+  }
+  finally {
+    loading.value = false
+  }
+}
 
+function requestConfirmation() {
+  if (!canSubmit.value)
+    return
   confirmationOpen.value = true
 }
 
 async function confirmChange() {
+  if (!checkIn.value || !checkOut.value || !booking.value)
+    return
   isSaving.value = true
-  successMessage.value = ''
-
-  await new Promise(resolve => setTimeout(resolve, 600))
-
-  confirmationOpen.value = false
-  isSaving.value = false
-  successMessage.value = `Booking ${booking.id} dates updated for this demo.`
+  error.value = ''
+  const token = await sessionToken()
+  if (!token) {
+    isSaving.value = false
+    confirmationOpen.value = false
+    error.value = 'Please sign in to change this booking.'
+    return
+  }
+  try {
+    await bookingStore.changeDates(
+      token,
+      booking.value.id,
+      checkIn.value.toString(),
+      checkOut.value.toString(),
+    )
+    confirmationOpen.value = false
+    await router.push({ name: 'booking-history', query: { bookingId: booking.value.id } })
+  }
+  catch (cause) {
+    confirmationOpen.value = false
+    error.value = apiErrorMessage(cause, 'Could not change these dates.')
+  }
+  finally {
+    isSaving.value = false
+  }
 }
+
+watch(isLoaded, (ready) => {
+  if (ready)
+    void loadBooking()
+}, { immediate: true })
 </script>
 
 <template>
@@ -116,7 +172,27 @@ async function confirmChange() {
     <SiteNavbar />
 
     <main class="flex-1">
-      <section aria-labelledby="change-date-title" class="mx-auto max-w-280 px-4 pt-10 pb-14 lg:pt-20 lg:pb-32">
+      <p
+        v-if="loading"
+        class="mx-auto max-w-280 px-4 pt-10 text-body1 text-gray-700 lg:pt-20"
+        role="status"
+      >
+        Loading booking…
+      </p>
+
+      <p
+        v-else-if="error && !booking"
+        class="mx-auto max-w-280 px-4 pt-10 text-body1 text-red lg:pt-20"
+        role="alert"
+      >
+        {{ error }}
+      </p>
+
+      <section
+        v-else-if="booking"
+        aria-labelledby="change-date-title"
+        class="mx-auto max-w-280 px-4 pt-10 pb-14 lg:pt-20 lg:pb-32"
+      >
       <h1
         id="change-date-title"
         class="max-w-142 font-serif text-h3 text-green-800 lg:text-h2 lg:text-green-700"
@@ -131,6 +207,14 @@ async function confirmChange() {
           and Check-out Date
         </span>
       </h1>
+
+      <p
+        v-if="error"
+        class="mt-4 text-body1 text-red"
+        role="alert"
+      >
+        {{ error }}
+      </p>
 
       <article class="-mx-4 mt-6 border-b border-gray-300 pb-6 lg:mx-0 lg:mt-14 lg:py-10">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-12">
@@ -155,7 +239,7 @@ async function confirmChange() {
                 Original Date
               </h3>
               <p class="mt-1 text-body1 text-gray-700">
-                {{ formatDate(booking.checkIn) }}&nbsp; - &nbsp;{{ formatDate(booking.checkOut) }}
+                {{ formatDate(originalCheckIn) }}&nbsp; - &nbsp;{{ formatDate(originalCheckOut) }}
               </p>
             </section>
 
@@ -188,8 +272,8 @@ async function confirmChange() {
                     id="check-out"
                     v-model="checkOut"
                     placeholder="Select check-out date"
-                    :min-value="minimumCheckOut"
-                    :max-value="maximumCheckOut"
+                    :min-value="requiredCheckOut"
+                    :max-value="requiredCheckOut"
                     :invalid="!!dateError"
                     aria-describedby="check-out-error"
                   />
@@ -207,13 +291,6 @@ async function confirmChange() {
             <RouterLink to="/booking-history">Cancel</RouterLink>
           </Button>
         </div>
-
-        <p
-          aria-live="polite"
-          class="mt-6 px-4 text-body1 font-medium text-green-700 lg:px-0"
-        >
-          {{ successMessage }}
-        </p>
       </article>
     </section>
 

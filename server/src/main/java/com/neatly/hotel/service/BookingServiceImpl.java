@@ -2,8 +2,11 @@ package com.neatly.hotel.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -18,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neatly.hotel.dto.BookingResponse;
+import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
 import com.neatly.hotel.dto.PageResponse;
 import com.neatly.hotel.exception.ApiException;
@@ -55,6 +59,8 @@ public class BookingServiceImpl implements BookingService {
 			BookingStatus.CHECKED_OUT,
 			BookingStatus.COMPLETED,
 			BookingStatus.CANCELLED);
+	private static final ZoneId HOTEL_ZONE = ZoneId.of("Asia/Bangkok");
+	private static final LocalTime CHECK_IN_TIME = LocalTime.of(14, 0);
 
 	private final BookingRepository bookingRepository;
 	private final RoomTypeRepository roomTypeRepository;
@@ -194,6 +200,39 @@ public class BookingServiceImpl implements BookingService {
 	}
 
 	@Override
+	public BookingResponse cancel(String clerkUserId, UUID bookingId) {
+		Booking booking = requireMine(clerkUserId, bookingId);
+		if (booking.getStatus() != BookingStatus.CONFIRMED) {
+			throw new ApiException("This booking cannot be cancelled", HttpStatus.BAD_REQUEST);
+		}
+		if (isRefundable(booking)) {
+			refundPaidStripeCharge(booking);
+		}
+		booking.setStatus(BookingStatus.CANCELLED);
+		booking.setCancelledAt(Instant.now());
+		return toResponse(bookingRepository.save(booking), null);
+	}
+
+	@Override
+	public BookingResponse changeDates(String clerkUserId, UUID bookingId, ChangeBookingDatesRequest request) {
+		Booking booking = requireMine(clerkUserId, bookingId);
+		if (!canChangeDates(booking)) {
+			throw new ApiException("This booking cannot change dates", HttpStatus.BAD_REQUEST);
+		}
+		int originalNights = nights(booking.getCheckIn(), booking.getCheckOut());
+		int nextNights = nights(request.checkIn(), request.checkOut());
+		if (nextNights != originalNights) {
+			throw new ApiException(
+					"The new stay must be exactly " + originalNights + (originalNights == 1 ? " night" : " nights"),
+					HttpStatus.BAD_REQUEST);
+		}
+		assertAvailable(booking.getRoomType(), request.checkIn(), request.checkOut(), booking.getRoomsCount(), booking.getId());
+		booking.setCheckIn(request.checkIn());
+		booking.setCheckOut(request.checkOut());
+		return toResponse(bookingRepository.save(booking), null);
+	}
+
+	@Override
 	public void handleStripeEvent(String payload, String signature) {
 		StripeCheckoutGateway.WebhookEvent event = stripe.parseEvent(payload, signature);
 		if (stripeEventRepository.existsById(event.eventId())) {
@@ -326,6 +365,47 @@ public class BookingServiceImpl implements BookingService {
 		booking.setDiscountTotal(discount);
 		booking.setGrandTotal(total);
 		booking.setCurrency("THB");
+	}
+
+	private void refundPaidStripeCharge(Booking booking) {
+		Payment charge = latestStripeCharge(booking)
+				.filter(payment -> payment.getStatus() == PaymentStatus.SUCCEEDED)
+				.orElse(null);
+		if (charge == null) {
+			return;
+		}
+		String paymentIntentId = charge.getStripePaymentIntentId();
+		if (paymentIntentId == null || paymentIntentId.isBlank()) {
+			throw new ApiException("Could not refund this payment", HttpStatus.BAD_GATEWAY);
+		}
+		String refundId = stripe.refund(paymentIntentId, booking.getGrandTotal());
+		Payment refund = new Payment();
+		refund.setBooking(booking);
+		refund.setParentPayment(charge);
+		refund.setProvider(PaymentProvider.STRIPE);
+		refund.setKind(PaymentKind.REFUND);
+		refund.setStatus(PaymentStatus.SUCCEEDED);
+		refund.setAmount(booking.getGrandTotal());
+		refund.setCurrency(booking.getCurrency());
+		refund.setStripePaymentIntentId(paymentIntentId);
+		refund.setStripeRefundId(refundId);
+		refund.setPaidAt(Instant.now());
+		booking.getPayments().add(refund);
+	}
+
+	private boolean canChangeDates(Booking booking) {
+		return booking.getStatus() == BookingStatus.CONFIRMED
+				&& booking.getCreatedAt() != null
+				&& Instant.now().isBefore(booking.getCreatedAt().plus(Duration.ofHours(24)));
+	}
+
+	private boolean isRefundable(Booking booking) {
+		Instant checkInAt = booking.getCheckIn().atTime(CHECK_IN_TIME).atZone(HOTEL_ZONE).toInstant();
+		return Instant.now().isBefore(checkInAt.minus(Duration.ofHours(24)));
+	}
+
+	private static int nights(LocalDate checkIn, LocalDate checkOut) {
+		return (int) (checkOut.toEpochDay() - checkIn.toEpochDay());
 	}
 
 	private void assertAvailable(RoomType roomType, LocalDate checkIn, LocalDate checkOut, int rooms, UUID excludeId) {

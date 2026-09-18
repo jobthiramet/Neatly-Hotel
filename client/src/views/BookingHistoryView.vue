@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { UserBooking } from '@/data/booking'
+import { defaultRoomId, roomDetails } from '@/data/rooms'
 import { useBookingStore } from '@/stores/booking'
 
 const router = useRouter()
@@ -48,6 +49,11 @@ function formatMoney(amount: number) {
     maximumFractionDigits: 2,
   })
   return amount < 0 ? `-${formatted}` : formatted
+}
+
+function roomDetailLink(roomName: string) {
+  const match = Object.entries(roomDetails).find(([, room]) => room.name === roomName)
+  return { name: 'room-detail', params: { roomId: match?.[0] ?? defaultRoomId } }
 }
 
 const expandedBookingIds = ref<Record<string, boolean>>({})
@@ -225,7 +231,7 @@ watch(isLoaded, (ready) => {
                 <div class="overflow-hidden rounded-sm bg-gray-100">
                   <button
                     type="button"
-                    class="flex w-full items-center justify-between p-4 text-left outline-none is-focus:ring-2 is-focus:ring-ring"
+                    class="flex w-full cursor-pointer items-center justify-between p-4 text-left outline-none transition-colors is-hover:bg-gray-200 is-focus:ring-2 is-focus:ring-ring"
                     :aria-expanded="!!expandedBookingIds[booking.id]"
                     @click="toggleAccordion(booking.id)"
                   >
@@ -298,7 +304,7 @@ watch(isLoaded, (ready) => {
                       variant="ghost"
                       as-child
                     >
-                      <RouterLink to="/#rooms">Room Detail</RouterLink>
+                      <RouterLink :to="roomDetailLink(booking.roomName)">Room Detail</RouterLink>
                     </Button>
 
                     <Button
@@ -319,7 +325,7 @@ watch(isLoaded, (ready) => {
                     class="flex items-center justify-between"
                   >
                     <Button variant="ghost" as-child>
-                      <RouterLink to="/#rooms">Room Detail</RouterLink>
+                      <RouterLink :to="roomDetailLink(booking.roomName)">Room Detail</RouterLink>
                     </Button>
 
                     <Button
