@@ -1,7 +1,7 @@
 <!-- Figma: user > room detail (102:2788 desktop) & mobile > user > room detail -->
 <script setup lang="ts">
 import { getLocalTimeZone, today } from '@internationalized/date'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget.vue'
 import { IconArrowRight } from '@/components/icons'
@@ -10,25 +10,75 @@ import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import { rooms as allHomeRooms } from '@/data/home'
-import { defaultRoomId, roomDetails } from '@/data/rooms'
+import { defaultRoomId, type RoomDetail, roomDetails } from '@/data/rooms'
+import { BED_TYPE_LABELS, type RoomResponse, useRoomsStore } from '@/stores/rooms'
 
 const route = useRoute()
 const router = useRouter()
 
 // ── Active Room Data ────────────────────────────────────────────────────────
+// A UUID (e.g. from Search Result) loads the real room; mock slugs keep using data/rooms.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const param = computed(() => route.params.roomId as string | undefined)
+const isApiRoom = computed(() => !!param.value && UUID_RE.test(param.value))
+
 const activeRoomId = computed(() => {
-  const param = route.params.roomId as string | undefined
-  if (param && roomDetails[param]) {
-    return param
+  if (isApiRoom.value)
+    return param.value!
+  if (param.value && roomDetails[param.value]) {
+    return param.value
   }
   return defaultRoomId
 })
 
-const room = computed(() => roomDetails[activeRoomId.value] ?? roomDetails[defaultRoomId]!)
+const roomsStore = useRoomsStore()
+const apiRoom = ref<RoomResponse | null>(null)
+const apiError = ref('')
+
+watch(param, async () => {
+  apiRoom.value = null
+  apiError.value = ''
+  if (!isApiRoom.value)
+    return
+  const requested = param.value
+  try {
+    const loaded = await roomsStore.get(requested!)
+    if (requested === param.value)
+      apiRoom.value = loaded
+  }
+  catch {
+    if (requested === param.value)
+      apiError.value = "We couldn't load this room. It may no longer be available."
+  }
+}, { immediate: true })
+
+function toRoomDetail(api: RoomResponse): RoomDetail {
+  const half = Math.ceil(api.amenities.length / 2)
+  return {
+    id: api.id,
+    name: api.name,
+    description: api.description,
+    originalPrice: api.pricePerNight,
+    currentPrice: api.promotionPrice ?? api.pricePerNight,
+    capacity: `${api.capacity} Person`,
+    bedType: BED_TYPE_LABELS[api.bedType],
+    size: `${api.sizeSqm} sqm`,
+    gallery: [api.mainImage, ...api.gallery].filter(image => !!image).map(image => ({ src: image.url, alt: api.name })),
+    amenitiesCol1: api.amenities.slice(0, half),
+    amenitiesCol2: api.amenities.slice(half),
+  }
+}
+
+/** Null while a real room is loading or failed to load. */
+const room = computed<RoomDetail | null>(() => {
+  if (isApiRoom.value)
+    return apiRoom.value && toRoomDetail(apiRoom.value)
+  return roomDetails[activeRoomId.value] ?? roomDetails[defaultRoomId]!
+})
 
 // Embla carousel needs duplicated slides if length is small to enable smooth loop
 const galleryPhotos = computed(() => {
-  const g = room.value.gallery
+  const g = room.value?.gallery ?? []
   return g.length < 5 ? [...g, ...g, ...g] : [...g, ...g]
 })
 
@@ -45,15 +95,18 @@ function formatPrice(amount: number) {
   })
 }
 
+// Opened from Search Result: keep the searched stay; otherwise default to tonight for 2 guests.
 function handleBookNow() {
   const checkIn = today(getLocalTimeZone())
+  const { checkIn: searchedIn, checkOut: searchedOut, rooms, guests } = route.query
   router.push({
     name: 'booking',
     query: {
       roomId: activeRoomId.value,
-      checkIn: checkIn.toString(),
-      checkOut: checkIn.add({ days: 1 }).toString(),
-      guests: '2',
+      checkIn: typeof searchedIn === 'string' ? searchedIn : checkIn.toString(),
+      checkOut: typeof searchedOut === 'string' ? searchedOut : checkIn.add({ days: 1 }).toString(),
+      ...(typeof rooms === 'string' ? { rooms } : {}),
+      guests: typeof guests === 'string' ? guests : '2',
     },
   })
 }
@@ -63,6 +116,11 @@ function handleBookNow() {
   <SiteNavbar />
 
   <main class="bg-bg min-h-screen">
+    <p v-if="!room" role="status" class="mx-auto max-w-288 px-4 py-24 text-center text-body1 text-gray-700">
+      {{ apiError || 'Loading room…' }}
+    </p>
+
+    <template v-else>
     <!-- ── Hero Image Slider ──────────────────────────────────────────────── -->
     <section aria-label="Room gallery" class="relative overflow-hidden pt-4 lg:pt-8">
       <Carousel
@@ -108,7 +166,7 @@ function handleBookNow() {
         </p>
 
         <div class="flex flex-col items-start lg:items-end">
-          <span class="text-body1 text-gray-500 line-through">
+          <span v-if="room.originalPrice !== room.currentPrice" class="text-body1 text-gray-500 line-through">
             {{ formatPrice(room.originalPrice) }}
           </span>
           <span class="font-sans text-h4 font-semibold text-gray-900">
@@ -163,6 +221,8 @@ function handleBookNow() {
         </div>
       </div>
     </section>
+
+    </template>
 
     <!-- ── Other Rooms Section ────────────────────────────────────────────── -->
     <section aria-labelledby="other-rooms-title" class="bg-bg border-t border-gray-300 pt-12 pb-16 lg:pt-20 lg:pb-28">

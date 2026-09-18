@@ -44,6 +44,12 @@ export interface RoomSummary {
   sizeSqm: number
 }
 
+/** Row of `GET /api/rooms/available`. */
+export interface AvailableRoom extends RoomSummary {
+  description: string
+  availableUnits: number
+}
+
 export interface PageResponse<T> {
   content: T[]
   /** Zero-based. */
@@ -99,6 +105,12 @@ export const useRoomsStore = defineStore('rooms', () => {
     return data.data
   }
 
+  /** Dates are ISO `YYYY-MM-DD`. Empty array when nothing is available. */
+  async function available(params: { checkIn: string, checkOut: string, rooms: number, guests: number }) {
+    const { data } = await api.get<ApiResponse<AvailableRoom[]>>('/rooms/available', { params })
+    return data.data
+  }
+
   async function get(id: string) {
     const { data } = await api.get<ApiResponse<RoomResponse>>(`/rooms/${id}`)
     return data.data
@@ -139,5 +151,5 @@ export const useRoomsStore = defineStore('rooms', () => {
     return data.data
   }
 
-  return { list, get, create, update, remove, uploadImage, removeImage, reorderImages }
+  return { list, available, get, create, update, remove, uploadImage, removeImage, reorderImages }
 })
