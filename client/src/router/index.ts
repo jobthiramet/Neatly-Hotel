@@ -34,6 +34,11 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/search',
+      name: 'search',
+      component: () => import('../views/SearchResultView.vue'),
+    },
+    {
       path: '/rooms/:roomId',
       name: 'room-detail',
       component: () => import('../views/RoomDetailView.vue'),

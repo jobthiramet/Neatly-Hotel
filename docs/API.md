@@ -177,6 +177,44 @@ List non-deleted rooms, newest first.
 }
 ```
 
+#### `GET /api/rooms/available`
+
+Search Result page: room types that can be booked for a stay.
+
+- Auth: none
+- Query params (all required):
+
+| Param | Type | Validation |
+| --- | --- | --- |
+| `checkIn` | date `YYYY-MM-DD` | Not before today in hotel time (`app.hotel.time-zone`, default `Asia/Bangkok`) |
+| `checkOut` | date `YYYY-MM-DD` | After `checkIn` (field error `checkOutValid`); stay at most `app.search.max-nights` (default 30) nights |
+| `rooms` | integer | 1–10 |
+| `guests` | integer | 1–6 |
+
+- Availability rules:
+  - **Bookable units** of a room type: non-deleted `room_units` whose status is not `OUT_OF_ORDER` or `OUT_OF_SERVICE`. Housekeeping statuses (clean, dirty, inspected, …) don't affect future stays.
+  - **Booked units**: `booking_rooms` rows of that type whose booking overlaps the stay (`booking.check_in < checkOut AND booking.check_out > checkIn`) and is `CONFIRMED`, `CHECKED_IN`, or `PENDING_PAYMENT` with an unexpired hold. A checkout day can be another stay's check-in day. Bookings are counted per room type because `room_unit_id` stays null until a unit is assigned.
+  - A room type is returned when `bookable − booked ≥ rooms` and `capacity × rooms ≥ guests`. Soft-deleted room types never appear.
+- Response `200`: `ApiResponse<AvailableRoomResponse[]>`, cheapest `pricePerNight` first. **Empty array (not `404`) when nothing is available.**
+
+`AvailableRoomResponse`: the `RoomSummaryResponse` fields plus `description` (string) and `availableUnits` (integer).
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": [
+    { "id": "3f2c1b9e-7a4d-4c8e-9b1a-2d5e6f7a8b9c", "name": "Superior Garden View", "mainImageUrl": "https://<project>.supabase.co/storage/v1/object/public/room-images/rooms/3f2c.../a1b2....jpg", "pricePerNight": 3100.00, "promotionPrice": 2500.00, "capacity": 2, "bedType": "DOUBLE", "sizeSqm": 32, "description": "Rooms (36sqm) with full garden views, ...", "availableUnits": 8 }
+  ],
+  "timestamp": "2026-09-18T07:06:56.345Z"
+}
+```
+
+- Errors:
+  - `400` `Validation failed` with field `details`, e.g. `["checkOutValid: check-out must be after check-in", "rooms: must be greater than or equal to 1"]`. A missing param gives `must not be null`; a non-ISO date gives `checkIn: invalid value`.
+  - `400` with `message` `checkIn: must not be in the past (hotel time, Asia/Bangkok)` or `checkOut: stay must be at most 30 nights` (`details` empty).
+  - `429` rate limit (same limit and body as `GET /api/rooms`).
+
 #### `GET /api/rooms/{id}`
 
 - Auth: none
@@ -467,7 +505,7 @@ Upload or replace the signed-in user's profile picture. The server derives the C
 
 ### Bookings
 
-Guest checkout for a signed-in Clerk user. Prices, extras, and promo discounts are calculated on the server from `room_types` and `promotion_codes`. Inventory is `room_types.total_units` minus overlapping `booking_rooms` in `PENDING_PAYMENT`, `CONFIRMED`, or `CHECKED_IN` (expired Stripe drafts do not occupy a unit). Checkout inserts one `booking_rooms` row per requested room with `room_unit_id` null; a physical unit is assigned later. Money is THB `numeric(12,2)`; Stripe amounts are that value × 100.
+Guest checkout for a signed-in Clerk user. Prices, extras, and promo discounts are calculated on the server from `room_types` and `promotion_codes`. Inventory is the room type's bookable `room_units` (not deleted, status not `OUT_OF_ORDER`/`OUT_OF_SERVICE`, same rule as `GET /api/rooms/available`) minus overlapping `booking_rooms` in `PENDING_PAYMENT`, `CONFIRMED`, or `CHECKED_IN` (expired Stripe drafts do not occupy a unit). Checkout inserts one `booking_rooms` row per requested room with `room_unit_id` null; a physical unit is assigned later. Money is THB `numeric(12,2)`; Stripe amounts are that value × 100.
 
 Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Element). Do not send PAN/CVC to this API.
 
@@ -478,8 +516,8 @@ Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Ele
 | `roomTypeId` | UUID | yes | existing non-deleted room type |
 | `checkIn` | date | yes | ISO-8601 date |
 | `checkOut` | date | yes | must be after `checkIn` (`stayValid`) |
-| `guests` | integer | yes | 1–6, and ≤ room `capacity` |
-| `roomsCount` | integer | no | 1–10; default `1` |
+| `guests` | integer | yes | 1–6, and ≤ room `capacity` × `roomsCount` |
+| `roomsCount` | integer | no | 1–10; default `1`. That many units of the room type must be free for the whole stay (`409` otherwise); the room subtotal is nightly price × nights × `roomsCount` |
 | `firstName` | string | yes | not blank; max 100 |
 | `lastName` | string | yes | not blank; max 100 |
 | `email` | string | yes | email; max 254 |
@@ -505,7 +543,7 @@ Create a booking for the signed-in user (`sub` claim).
 - `CASH`: status `CONFIRMED` immediately, payment `UNPAID` (pay at hotel). No `clientSecret`.
 - `STRIPE`: status `PENDING_PAYMENT`, 5-minute hold (`holdExpiresAt`), a Checkout Session, and `clientSecret` for `stripe.initCheckoutElementsSdk`. Any other open Stripe draft for this user is expired first.
 - Response `201`: `ApiResponse<BookingResponse>` with `message: "Booking created"`
-- Errors: `400` validation / unknown extra or preference / guest count exceeds capacity; `401`; `404` room not found; `409` no remaining units for the dates; `502` Stripe API failure; `503` `STRIPE_SECRET_KEY` missing (cash still works)
+- Errors: `400` validation / unknown extra or preference / guest count exceeds capacity × rooms; `401`; `404` room not found; `409` no remaining units for the dates; `502` Stripe API failure; `503` `STRIPE_SECRET_KEY` missing (cash still works)
 
 #### `GET /api/bookings`
 
@@ -585,6 +623,9 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 - Added authenticated `POST /api/bookings/{id}/cancel` (full Stripe refund when check-in is more than 24 hours away; cash/unpaid bookings are cancelled only).
 - Added authenticated `PATCH /api/bookings/{id}/dates` (within 24 hours of booking; new stay must keep the original number of nights; price unchanged).
+- Added public `GET /api/rooms/available?checkIn&checkOut&rooms&guests` for the Search Result page. Counts bookable `room_units` minus overlapping active bookings per room type; rate limited like `GET /api/rooms`. Checkout (`POST /api/bookings`) now uses the same inventory: bookable `room_units` instead of `room_types.total_units` (behaviour change: a type's sellable count now follows its units).
+- `POST /api/bookings`: `guests` may now be up to `capacity × roomsCount` (was `capacity`), so a 2-room booking for 4 guests of a 2-person room is accepted.
+- `400 Validation failed` details for a query param of the wrong type (bound to a request object) now read `<field>: invalid value` instead of the Java conversion message (all endpoints).
 
 ### 2026-09-17
 

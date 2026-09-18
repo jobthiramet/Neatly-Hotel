@@ -82,6 +82,11 @@ const guests = computed(() => {
   const value = Number(route.query.guests)
   return Number.isInteger(value) && value > 0 ? value : 2
 })
+// Rooms of this type to book (from Search Result); checkout needs that many free units.
+const rooms = computed(() => {
+  const value = Number(route.query.rooms)
+  return Number.isInteger(value) && value >= 1 && value <= 10 ? value : 1
+})
 const roomsStore = useRoomsStore()
 const apiRoom = ref<RoomResponse | null>(null)
 const roomLoadError = ref('')
@@ -153,7 +158,7 @@ const { pause: pauseTimer } = useIntervalFn(() => {
 }, 1000)
 
 const nights = computed(() => Math.max(1, nightsBetween(checkIn.value, checkOut.value)))
-const roomAmount = computed(() => roomPrice.value * nights.value)
+const roomAmount = computed(() => roomPrice.value * nights.value * rooms.value)
 const extraItems = computed(() =>
   specialRequests
     .filter(item => selectedRequestIds.value.includes(item.id))
@@ -162,7 +167,7 @@ const extraItems = computed(() =>
 const promotionAmount = computed(() => promotionDiscount(payment.promotionCode))
 const lineItems = computed(() => {
   const items = [
-    { label: `${roomName.value} Room`, amount: roomAmount.value },
+    { label: rooms.value > 1 ? `${rooms.value} × ${roomName.value} Room` : `${roomName.value} Room`, amount: roomAmount.value },
     ...extraItems.value,
   ]
   if (promotionAmount.value)
@@ -269,6 +274,7 @@ function buildRequest(method: 'STRIPE' | 'CASH'): CreateBookingRequest {
     checkIn: checkIn.value.toString(),
     checkOut: checkOut.value.toString(),
     guests: guests.value,
+    roomsCount: rooms.value,
     firstName: guest.firstName.trim(),
     lastName: guest.lastName.trim(),
     email: guest.email.trim(),

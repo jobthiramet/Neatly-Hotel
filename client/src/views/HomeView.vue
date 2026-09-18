@@ -2,12 +2,13 @@
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
 import { computed, onMounted, ref, useTemplateRef } from 'vue'
+import { useRouter } from 'vue-router'
 import heroImage from '@/assets/home/hero.webp'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget.vue'
 import { IconArrowRight } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
-import RoomSearchForm from '@/components/RoomSearchForm.vue'
+import RoomSearchForm, { type RoomSearchQuery, toSearchRouteQuery } from '@/components/RoomSearchForm.vue'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import { facilities, hotelPhotos, rooms, testimonials } from '@/data/home'
@@ -17,6 +18,12 @@ import { useHotelStore } from '@/stores/hotel'
 // ── Desktop: one wheel gesture or key press glides to the next [data-scroll-section] ──
 const navbar = useTemplateRef<{ $el: HTMLElement }>('navbar')
 const { scrollToTop } = useSectionScroll(useTemplateRef('scrollRoot'), { offset: () => navbar.value?.$el.offsetHeight ?? 0 })
+
+// ── Hero: search opens the Search Result page ──────────────────────────────
+const router = useRouter()
+function search(query: RoomSearchQuery) {
+  router.push({ name: 'search', query: toSearchRouteQuery(query) })
+}
 
 // ── About: name and description are edited in admin / hotel information ───
 const hotel = useHotelStore()
@@ -62,7 +69,7 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
       <h1 id="hero-title" class="max-w-73 text-center font-serif text-h3 text-white md:max-w-150 lg:max-w-200 lg:text-h1">
         A Best Place for Your Neatly Experience
       </h1>
-      <RoomSearchForm class="mt-12 w-full max-w-280 lg:mt-16" />
+      <RoomSearchForm class="mt-12 w-full max-w-280 lg:mt-16" @search="search" />
     </section>
 
     <!-- About: one screen on desktop; photos shrink so the full description fits (a very long one grows the section) -->
