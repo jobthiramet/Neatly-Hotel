@@ -29,18 +29,26 @@ type ChatMessage
   | { id: number, role: 'bot', kind: 'option-with-details', title: string, options: ChatbotPaymentOption[] }
   | { id: number, role: 'bot', kind: 'cta', text: string, actionLabel: string, to: string, query?: Record<string, string> }
 
+const BOT_REPLY_DELAY_MS = 200
+
 const route = useRoute()
 const { isLoaded, isSignedIn } = useAuth()
 const signedIn = computed(() => Boolean(isLoaded.value && isSignedIn.value))
 const open = ref(false)
+const showFab = ref(true)
 const draft = ref('')
 const canSend = computed(() => Boolean(draft.value.trim()))
 const messages = ref<ChatMessage[]>([])
 let nextMessageId = 1
+let replyTimer = 0
 const rooms = Object.values(roomDetails)
 const fabButton = useTemplateRef<HTMLButtonElement>('fabButton')
 const closeButton = useTemplateRef<HTMLButtonElement>('closeButton')
 const logRegion = useTemplateRef<HTMLElement>('logRegion')
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
 
 function formatPrice(amount: number) {
   return 'THB ' + amount.toLocaleString('en-US', {
@@ -52,21 +60,55 @@ function formatPrice(amount: number) {
 function scrollToLatest() {
   void nextTick(() => {
     const log = logRegion.value
-    if (log) log.scrollTop = log.scrollHeight
+    if (!log) return
+    log.scrollTo({
+      top: log.scrollHeight,
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    })
   })
 }
 
+function clearReplyTimer() {
+  if (!replyTimer) return
+  window.clearTimeout(replyTimer)
+  replyTimer = 0
+}
+
+function enqueueBotReply(reply: () => void) {
+  clearReplyTimer()
+  const delay = prefersReducedMotion() ? 0 : BOT_REPLY_DELAY_MS
+  if (delay === 0) {
+    reply()
+    scrollToLatest()
+    return
+  }
+  replyTimer = window.setTimeout(() => {
+    replyTimer = 0
+    reply()
+    scrollToLatest()
+  }, delay)
+}
+
 function openPanel() {
+  showFab.value = false
   open.value = true
-  void nextTick(() => closeButton.value?.focus())
+}
+
+function onPanelEntered() {
+  closeButton.value?.focus()
   scrollToLatest()
+}
+
+function onPanelLeft() {
+  showFab.value = true
+  fabButton.value?.focus()
 }
 
 function closePanel() {
   if (!open.value) return
   open.value = false
   draft.value = ''
-  void nextTick(() => fabButton.value?.focus())
+  clearReplyTimer()
 }
 
 function pushCta(cta: ChatbotCta) {
@@ -124,8 +166,8 @@ function selectTopic(topic: ChatbotTopic) {
   if (!topic.enabled) return
 
   messages.value.push({ id: nextMessageId++, role: 'user', text: topic.label })
-  replyToTopic(topic)
   scrollToLatest()
+  enqueueBotReply(() => replyToTopic(topic))
 }
 
 function handleSubmit() {
@@ -134,19 +176,20 @@ function handleSubmit() {
 
   draft.value = ''
   messages.value.push({ id: nextMessageId++, role: 'user', text })
+  scrollToLatest()
 
   const topic = findChatbotTopic(text)
-  if (topic) replyToTopic(topic)
-  else {
-    messages.value.push({
-      id: nextMessageId++,
-      role: 'bot',
-      kind: 'message',
-      text: chatbotAutoReply,
-    })
-  }
-
-  scrollToLatest()
+  enqueueBotReply(() => {
+    if (topic) replyToTopic(topic)
+    else {
+      messages.value.push({
+        id: nextMessageId++,
+        role: 'bot',
+        kind: 'message',
+        text: chatbotAutoReply,
+      })
+    }
+  })
 }
 
 onKeyStroke('Escape', closePanel)
@@ -158,17 +201,19 @@ watch(open, (isOpen) => {
 watch(() => route.fullPath, () => {
   messages.value = []
   draft.value = ''
+  clearReplyTimer()
 })
 
 onUnmounted(() => {
   document.body.style.overflow = ''
+  clearReplyTimer()
 })
 </script>
 
 <template>
   <div>
     <button
-      v-show="!open"
+      v-show="showFab"
       ref="fabButton"
       type="button"
       aria-label="Chat with Neatly"
@@ -181,16 +226,38 @@ onUnmounted(() => {
       <IconChat class="size-8" />
     </button>
 
-    <template v-if="open">
+    <Transition
+      :duration="200"
+      enter-active-class="duration-200 motion-reduce:transition-none chatbot-overlay-motion"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="duration-200 motion-reduce:transition-none chatbot-overlay-motion"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
       <button
+        v-if="open"
         type="button"
         tabindex="-1"
         aria-label="Close chatbot"
         class="fixed inset-0 z-40 bg-black/40"
         @click="closePanel"
       />
+    </Transition>
 
+    <Transition
+      :duration="300"
+      enter-active-class="duration-300 ease-out motion-reduce:transition-none chatbot-panel-motion"
+      enter-from-class="translate-y-full opacity-0 lg:translate-x-4 lg:translate-y-0"
+      enter-to-class="translate-y-0 opacity-100 lg:translate-x-0"
+      leave-active-class="duration-300 ease-out motion-reduce:transition-none chatbot-panel-motion"
+      leave-from-class="translate-y-0 opacity-100 lg:translate-x-0"
+      leave-to-class="translate-y-full opacity-0 lg:translate-x-4 lg:translate-y-0"
+      @after-enter="onPanelEntered"
+      @after-leave="onPanelLeft"
+    >
       <section
+        v-if="open"
         id="chatbot-panel"
         role="dialog"
         aria-modal="true"
@@ -228,91 +295,100 @@ onUnmounted(() => {
             {{ chatbotGreeting }}
           </p>
 
-          <article
-            v-for="message in messages"
-            :key="message.id"
-            class="flex flex-col gap-2"
+          <TransitionGroup
+            tag="div"
+            class="flex flex-col gap-4"
+            :duration="200"
+            enter-active-class="duration-200 ease-out motion-reduce:transition-none chatbot-bubble-motion"
+            enter-from-class="translate-y-2 opacity-0 motion-reduce:translate-y-0 motion-reduce:opacity-100"
+            enter-to-class="translate-y-0 opacity-100"
           >
-            <p
-              v-if="message.role === 'user'"
-              class="ml-auto max-w-63.75 rounded-sm bg-orange-500 px-4 py-2 text-body1 text-white lg:max-w-150"
+            <article
+              v-for="message in messages"
+              :key="message.id"
+              class="flex flex-col gap-2"
             >
-              {{ message.text }}
-            </p>
-
-            <p
-              v-else-if="message.kind === 'message'"
-              class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700 lg:max-w-150"
-            >
-              {{ message.text }}
-            </p>
-
-            <template v-else-if="message.kind === 'room-type'">
-              <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700 lg:max-w-150">
-                {{ message.title }}
-              </p>
-              <ul class="flex flex-col gap-3">
-                <li
-                  v-for="room in rooms"
-                  :key="`${message.id}-${room.id}`"
-                  class="overflow-hidden rounded-sm bg-white shadow-md"
-                >
-                  <img
-                    :src="room.gallery[0]?.src"
-                    :alt="room.gallery[0]?.alt ?? room.name"
-                    width="375"
-                    height="200"
-                    class="h-40 w-full object-cover"
-                  >
-                  <div class="flex flex-col gap-3 px-4 py-3">
-                    <h3 class="text-h5 text-gray-900">
-                      {{ room.name }}
-                    </h3>
-                    <p class="text-body1 text-gray-700">
-                      {{ formatPrice(room.currentPrice) }}
-                    </p>
-                    <Button as-child class="w-full">
-                      <RouterLink :to="{ name: 'room-detail', params: { roomId: room.id } }">
-                        {{ message.actionLabel }}
-                      </RouterLink>
-                    </Button>
-                  </div>
-                </li>
-              </ul>
-            </template>
-
-            <div
-              v-else-if="message.kind === 'cta'"
-              class="flex max-w-63.75 flex-col gap-2 lg:max-w-150"
-            >
-              <p class="rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+              <p
+                v-if="message.role === 'user'"
+                class="ml-auto max-w-63.75 rounded-sm bg-orange-500 px-4 py-2 text-body1 text-white lg:max-w-150"
+              >
                 {{ message.text }}
               </p>
-              <Button as-child class="w-full">
-                <RouterLink :to="{ path: message.to, query: message.query }">
-                  {{ message.actionLabel }}
-                </RouterLink>
-              </Button>
-            </div>
 
-            <template v-else>
-              <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700 lg:max-w-150">
-                {{ message.title }}
+              <p
+                v-else-if="message.kind === 'message'"
+                class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700 lg:max-w-150"
+              >
+                {{ message.text }}
               </p>
-              <ul class="flex flex-col gap-2">
-                <li v-for="option in message.options" :key="`${message.id}-${option.label}`">
-                  <details class="rounded-sm bg-white px-4 py-2">
-                    <summary class="cursor-pointer text-body1 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring">
-                      {{ option.label }}
-                    </summary>
-                    <p class="mt-2 text-body1 text-gray-700">
-                      {{ option.detail }}
-                    </p>
-                  </details>
-                </li>
-              </ul>
-            </template>
-          </article>
+
+              <template v-else-if="message.kind === 'room-type'">
+                <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700 lg:max-w-150">
+                  {{ message.title }}
+                </p>
+                <ul class="flex flex-col gap-3">
+                  <li
+                    v-for="room in rooms"
+                    :key="`${message.id}-${room.id}`"
+                    class="overflow-hidden rounded-sm bg-white shadow-md"
+                  >
+                    <img
+                      :src="room.gallery[0]?.src"
+                      :alt="room.gallery[0]?.alt ?? room.name"
+                      width="375"
+                      height="200"
+                      class="h-40 w-full object-cover"
+                    >
+                    <div class="flex flex-col gap-3 px-4 py-3">
+                      <h3 class="text-h5 text-gray-900">
+                        {{ room.name }}
+                      </h3>
+                      <p class="text-body1 text-gray-700">
+                        {{ formatPrice(room.currentPrice) }}
+                      </p>
+                      <Button as-child class="w-full">
+                        <RouterLink :to="{ name: 'room-detail', params: { roomId: room.id } }">
+                          {{ message.actionLabel }}
+                        </RouterLink>
+                      </Button>
+                    </div>
+                  </li>
+                </ul>
+              </template>
+
+              <div
+                v-else-if="message.kind === 'cta'"
+                class="flex max-w-63.75 flex-col gap-2 lg:max-w-150"
+              >
+                <p class="rounded-sm bg-white px-4 py-2 text-body1 text-gray-700">
+                  {{ message.text }}
+                </p>
+                <Button as-child class="w-full">
+                  <RouterLink :to="{ path: message.to, query: message.query }">
+                    {{ message.actionLabel }}
+                  </RouterLink>
+                </Button>
+              </div>
+
+              <template v-else>
+                <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 text-gray-700 lg:max-w-150">
+                  {{ message.title }}
+                </p>
+                <ul class="flex flex-col gap-2">
+                  <li v-for="option in message.options" :key="`${message.id}-${option.label}`">
+                    <details class="rounded-sm bg-white px-4 py-2">
+                      <summary class="cursor-pointer text-body1 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring">
+                        {{ option.label }}
+                      </summary>
+                      <p class="mt-2 text-body1 text-gray-700">
+                        {{ option.detail }}
+                      </p>
+                    </details>
+                  </li>
+                </ul>
+              </template>
+            </article>
+          </TransitionGroup>
 
           <ul class="flex flex-wrap gap-2" aria-label="Suggested topics">
             <li v-for="topic in chatbotTopics" :key="topic.id">
@@ -364,6 +440,17 @@ onUnmounted(() => {
           </button>
         </form>
       </section>
-    </template>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.chatbot-overlay-motion {
+  transition-property: opacity;
+}
+
+.chatbot-panel-motion,
+.chatbot-bubble-motion {
+  transition-property: opacity, translate;
+}
+</style>
