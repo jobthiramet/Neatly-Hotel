@@ -125,3 +125,21 @@ export async function retryBookingPayment(token: string, id: string) {
   })
   return data.data
 }
+
+export async function cancelBooking(token: string, id: string) {
+  const { data } = await api.post<ApiResponse<BookingResponse>>(`/bookings/${id}/cancel`, {}, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return data.data
+}
+
+export async function changeBookingDates(
+  token: string,
+  id: string,
+  body: { checkIn: string, checkOut: string },
+) {
+  const { data } = await api.patch<ApiResponse<BookingResponse>>(`/bookings/${id}/dates`, body, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return data.data
+}

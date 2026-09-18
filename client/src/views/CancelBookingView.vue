@@ -1,12 +1,14 @@
 <!-- Figma: user > cancel and refund & cancel booking (desktop & mobile) -->
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date'
-import { DateFormatter, getLocalTimeZone, parseDate } from '@internationalized/date'
-import { computed, ref } from 'vue'
+import { DateFormatter, getLocalTimeZone } from '@internationalized/date'
+import { useAuth } from '@clerk/vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
+import { apiErrorMessage } from '@/stores/hotel'
 import { useBookingStore } from '@/stores/booking'
 
 const props = defineProps<{
@@ -15,20 +17,20 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
+const { getToken, isLoaded } = useAuth()
 const bookingStore = useBookingStore()
 
-const bookingId = String(route.params.bookingId || 'b-101')
-const booking = computed(() => bookingStore.getBooking(bookingId) || bookingStore.bookings[0]!)
+const bookingId = computed(() => String(route.params.bookingId || ''))
+const booking = computed(() => bookingStore.getBooking(bookingId.value))
 
-// If prop isn't passed, deduce from route or booking status
 const isRefund = computed(() => {
-  if (props.refund !== undefined) return props.refund
-  if (route.name === 'booking-cancel' || booking.value.status === 'checkin-soon') {
-    return false
-  }
-  return true
+  if (props.refund !== undefined)
+    return props.refund
+  return booking.value?.status !== 'checkin-soon'
 })
 
+const loading = ref(true)
+const error = ref('')
 const isSubmitted = ref(false)
 const isSubmitting = ref(false)
 
@@ -44,7 +46,8 @@ interface FormattableDate {
 }
 
 function formatDate(value: FormattableDate | DateValue | undefined | null) {
-  if (!value) return ''
+  if (!value)
+    return ''
   return formatter.format(value.toDate(getLocalTimeZone()))
 }
 
@@ -55,19 +58,66 @@ function formatMoney(amount: number) {
   })
 }
 
-const cancellationDate = parseDate('2022-10-16')
+const cancellationDate = computed(() => booking.value?.cancellationDate)
+
+async function sessionToken() {
+  const tokenFn = getToken.value
+  return typeof tokenFn === 'function' ? await tokenFn() : null
+}
+
+async function loadBooking() {
+  loading.value = true
+  error.value = ''
+  const token = await sessionToken()
+  if (!token) {
+    loading.value = false
+    error.value = 'Please sign in to view this booking.'
+    return
+  }
+  try {
+    await bookingStore.loadOne(token, bookingId.value)
+    if (bookingStore.getBooking(bookingId.value)?.status === 'cancelled')
+      isSubmitted.value = true
+  }
+  catch (cause) {
+    error.value = apiErrorMessage(cause, 'Could not load this booking.')
+  }
+  finally {
+    loading.value = false
+  }
+}
 
 async function handleConfirmCancellation() {
+  if (!booking.value || isSubmitting.value)
+    return
   isSubmitting.value = true
-  await new Promise(resolve => setTimeout(resolve, 400))
-  bookingStore.cancelBooking(booking.value.id, cancellationDate)
-  isSubmitting.value = false
-  isSubmitted.value = true
+  error.value = ''
+  const token = await sessionToken()
+  if (!token) {
+    isSubmitting.value = false
+    error.value = 'Please sign in to cancel this booking.'
+    return
+  }
+  try {
+    await bookingStore.cancelBooking(token, booking.value.id)
+    isSubmitted.value = true
+  }
+  catch (cause) {
+    error.value = apiErrorMessage(cause, 'Could not cancel this booking.')
+  }
+  finally {
+    isSubmitting.value = false
+  }
 }
 
 function goBackToHome() {
   router.push('/')
 }
+
+watch(isLoaded, (ready) => {
+  if (ready)
+    void loadBooking()
+}, { immediate: true })
 </script>
 
 <template>
@@ -75,9 +125,25 @@ function goBackToHome() {
     <SiteNavbar />
 
     <main class="flex-1">
+      <p
+        v-if="loading"
+        class="mx-auto max-w-280 px-4 pt-10 text-body1 text-gray-700 lg:pt-20"
+        role="status"
+      >
+        Loading booking…
+      </p>
+
+      <p
+        v-else-if="error && !booking"
+        class="mx-auto max-w-280 px-4 pt-10 text-body1 text-red lg:pt-20"
+        role="alert"
+      >
+        {{ error }}
+      </p>
+
       <!-- Cancellation Request Form (Before Confirmation) -->
       <section
-        v-if="!isSubmitted"
+        v-else-if="booking && !isSubmitted"
         aria-labelledby="cancel-title"
         class="mx-auto max-w-280 px-4 pt-10 pb-14 lg:pt-20 lg:pb-32"
       >
@@ -87,6 +153,14 @@ function goBackToHome() {
         >
           {{ isRefund ? 'Request a Refund' : 'Cancel Booking' }}
         </h1>
+
+        <p
+          v-if="error"
+          class="mt-4 text-body1 text-red"
+          role="alert"
+        >
+          {{ error }}
+        </p>
 
         <article class="-mx-4 mt-6 border-b border-gray-300 pb-6 lg:mx-0 lg:mt-14 lg:py-10">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-12">
@@ -173,7 +247,7 @@ function goBackToHome() {
 
       <!-- Success / Submitted Screen (After Confirmation) -->
       <section
-        v-else
+        v-else-if="booking && isSubmitted"
         aria-labelledby="success-title"
         class="mx-auto max-w-185 px-4 pt-10 pb-14 lg:pt-20 lg:pb-32"
       >
