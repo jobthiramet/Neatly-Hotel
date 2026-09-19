@@ -8,29 +8,29 @@ import { IconChat, IconClose } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  chatbotAutoReply,
-  chatbotGreeting,
+  chatbotCancelTopic,
   chatbotGuestBookingCta,
   chatbotGuestCancelCta,
   chatbotSignedInCancelCta,
-  chatbotTopics,
-  findChatbotTopic,
+  isChatbotCancelLabel,
   type ChatbotCta,
   type ChatbotPaymentOption,
   type ChatbotTopic,
 } from '@/data/chatbot'
 import { roomDetails } from '@/data/rooms'
 import { cn } from '@/lib/utils'
+import { useChatbotStore } from '@/stores/chatbot'
 
 type ChatMessage
   = { id: number, role: 'user', text: string }
   | { id: number, role: 'bot', kind: 'message', text: string }
-  | { id: number, role: 'bot', kind: 'room-type', title: string, actionLabel: string }
+  | { id: number, role: 'bot', kind: 'room-type', title: string, actionLabel: string, roomIds: string[] }
   | { id: number, role: 'bot', kind: 'option-with-details', title: string, options: ChatbotPaymentOption[] }
   | { id: number, role: 'bot', kind: 'cta', text: string, actionLabel: string, to: string, query?: Record<string, string> }
 
 const BOT_REPLY_DELAY_MS = 200
 
+const chatbot = useChatbotStore()
 const route = useRoute()
 const { isLoaded, isSignedIn } = useAuth()
 const signedIn = computed(() => Boolean(isLoaded.value && isSignedIn.value))
@@ -41,10 +41,20 @@ const canSend = computed(() => Boolean(draft.value.trim()))
 const messages = ref<ChatMessage[]>([])
 let nextMessageId = 1
 let replyTimer = 0
-const rooms = Object.values(roomDetails)
+const allRooms = Object.values(roomDetails)
 const fabButton = useTemplateRef<HTMLButtonElement>('fabButton')
 const closeButton = useTemplateRef<HTMLButtonElement>('closeButton')
 const logRegion = useTemplateRef<HTMLElement>('logRegion')
+
+function roomsFor(roomIds: string[]) {
+  if (!roomIds.length)
+    return allRooms
+  const selected = roomIds.flatMap((id) => {
+    const room = roomDetails[id]
+    return room ? [room] : []
+  })
+  return selected.length ? selected : allRooms
+}
 
 function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -124,11 +134,6 @@ function pushCta(cta: ChatbotCta) {
 }
 
 function replyToTopic(topic: ChatbotTopic) {
-  if (topic.id === 'cancel-booking') {
-    pushCta(signedIn.value ? chatbotSignedInCancelCta : chatbotGuestCancelCta)
-    return
-  }
-
   if (topic.id === 'booking' && !signedIn.value) {
     pushCta({
       ...chatbotGuestBookingCta,
@@ -149,6 +154,7 @@ function replyToTopic(topic: ChatbotTopic) {
       kind: 'room-type',
       title: topic.title,
       actionLabel: topic.actionLabel,
+      roomIds: [...topic.roomIds],
     })
     return
   }
@@ -160,6 +166,16 @@ function replyToTopic(topic: ChatbotTopic) {
     title: topic.title,
     options: topic.options,
   })
+}
+
+function replyToCancel() {
+  pushCta(signedIn.value ? chatbotSignedInCancelCta : chatbotGuestCancelCta)
+}
+
+function selectCancel() {
+  messages.value.push({ id: nextMessageId++, role: 'user', text: chatbotCancelTopic.label })
+  scrollToLatest()
+  enqueueBotReply(replyToCancel)
 }
 
 function selectTopic(topic: ChatbotTopic) {
@@ -178,15 +194,20 @@ function handleSubmit() {
   messages.value.push({ id: nextMessageId++, role: 'user', text })
   scrollToLatest()
 
-  const topic = findChatbotTopic(text)
   enqueueBotReply(() => {
-    if (topic) replyToTopic(topic)
+    if (isChatbotCancelLabel(text)) {
+      replyToCancel()
+      return
+    }
+    const topic = chatbot.findTopic(text)
+    if (topic)
+      replyToTopic(topic)
     else {
       messages.value.push({
         id: nextMessageId++,
         role: 'bot',
         kind: 'message',
-        text: chatbotAutoReply,
+        text: chatbot.autoReply,
       })
     }
   })
@@ -292,7 +313,7 @@ onUnmounted(() => {
           class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-bg px-4 py-6"
         >
           <p class="max-w-63.75 rounded-sm bg-white px-4 py-2 text-body1 whitespace-pre-line text-gray-700 lg:max-w-150">
-            {{ chatbotGreeting }}
+            {{ chatbot.greeting }}
           </p>
 
           <TransitionGroup
@@ -328,7 +349,7 @@ onUnmounted(() => {
                 </p>
                 <ul class="flex flex-col gap-3">
                   <li
-                    v-for="room in rooms"
+                    v-for="room in roomsFor(message.roomIds)"
                     :key="`${message.id}-${room.id}`"
                     class="overflow-hidden rounded-sm bg-white shadow-md"
                   >
@@ -391,7 +412,7 @@ onUnmounted(() => {
           </TransitionGroup>
 
           <ul class="flex flex-wrap gap-2" aria-label="Suggested topics">
-            <li v-for="topic in chatbotTopics" :key="topic.id">
+            <li v-for="topic in chatbot.topics" :key="topic.id">
               <button
                 type="button"
                 :disabled="!topic.enabled"
@@ -405,6 +426,18 @@ onUnmounted(() => {
                 @click="selectTopic(topic)"
               >
                 {{ topic.label }}
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                :class="cn(
+                  'rounded-full border border-green-400 bg-green-200 px-4 py-2 text-body1 text-green-700 outline-none',
+                  'is-hover:bg-green-300 is-focus:ring-2 is-focus:ring-ring',
+                )"
+                @click="selectCancel"
+              >
+                {{ chatbotCancelTopic.label }}
               </button>
             </li>
           </ul>

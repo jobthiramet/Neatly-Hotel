@@ -31,4 +31,5 @@ export { default as IconChatText } from './IconChatText.vue'
 export { default as IconLogout } from './IconLogout.vue'
 
 export { default as IconEdit } from './IconEdit.vue'
+export { default as IconGrip } from './IconGrip.vue'
 export { default as IconTrash } from './IconTrash.vue'
