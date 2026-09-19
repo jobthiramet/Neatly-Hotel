@@ -6,6 +6,14 @@ export const chatbotGreeting
 export const chatbotAutoReply
   = 'Thanks for reaching out to us! If you need any more help, just give us a call at 020872345 we\'re happy to assist you! 🧡'
 
+/** Room slugs shown on Figma Chatbot Setup room-type cards. */
+export const chatbotDefaultRoomIds = [
+  'superior-garden-view',
+  'deluxe',
+  'superior',
+  'supreme',
+] as const
+
 export type ChatbotPaymentOption = {
   label: string
   detail: string
@@ -37,30 +45,34 @@ export const chatbotSignedInCancelCta: ChatbotCta = {
   to: '/booking-history',
 }
 
+export const chatbotCancelTopic = {
+  id: 'cancel-booking',
+  label: 'Cancel Booking',
+  enabled: true,
+} as const
+
+export type ChatbotReplyFormat = 'message' | 'room-type' | 'option-with-details'
+
 export type ChatbotTopic
   = {
-    id: 'cancel-booking'
-    label: 'Cancel Booking'
-    enabled: true
-  }
-  | {
-    id: 'check-in-out'
-    label: 'Check-in & Check-out Time'
+    id: string
+    label: string
     enabled: true
     format: 'message'
     text: string
   }
   | {
-    id: 'room-types' | 'booking' | 'promotion'
+    id: string
     label: string
     enabled: true
     format: 'room-type'
     title: string
-    actionLabel: 'View Details' | 'Book Now'
+    actionLabel: string
+    roomIds: string[]
   }
   | {
-    id: 'payment-methods'
-    label: 'Payment Methods'
+    id: string
+    label: string
     enabled: true
     format: 'option-with-details'
     title: string
@@ -75,6 +87,7 @@ export const chatbotTopics: ChatbotTopic[] = [
     format: 'room-type',
     title: 'Neatly Hotel offers a variety of room types to suit your needs! 🏨✨ Here are the options.',
     actionLabel: 'View Details',
+    roomIds: [...chatbotDefaultRoomIds],
   },
   {
     id: 'booking',
@@ -83,6 +96,7 @@ export const chatbotTopics: ChatbotTopic[] = [
     format: 'room-type',
     title: 'Let\'s get your booking started. First, please choose the type of room you\'d like 🏨✨.',
     actionLabel: 'Book Now',
+    roomIds: [...chatbotDefaultRoomIds],
   },
   {
     id: 'check-in-out',
@@ -109,22 +123,22 @@ export const chatbotTopics: ChatbotTopic[] = [
     ],
   },
   {
-    id: 'cancel-booking',
-    label: 'Cancel Booking',
-    enabled: true,
-  },
-  {
     id: 'promotion',
     label: 'Promotion',
     enabled: true,
     format: 'room-type',
     title: '🎉 Our promotion this month: Get 10% off 💰 when you book your stay within this month. Don\'t miss out!',
     actionLabel: 'Book Now',
+    roomIds: [...chatbotDefaultRoomIds],
   },
 ]
 
-export function findChatbotTopic(text: string): ChatbotTopic | undefined {
+export function findChatbotTopic(topics: ChatbotTopic[], text: string): ChatbotTopic | undefined {
   const needle = text.trim().toLowerCase()
   if (!needle) return undefined
-  return chatbotTopics.find(topic => topic.label.toLowerCase() === needle)
+  return topics.find(topic => topic.label.toLowerCase() === needle)
+}
+
+export function isChatbotCancelLabel(text: string) {
+  return text.trim().toLowerCase() === chatbotCancelTopic.label.toLowerCase()
 }

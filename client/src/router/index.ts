@@ -128,6 +128,12 @@ const router = createRouter({
           component: () => import('../views/admin/RoomEditView.vue'),
           meta: { adminNav: 'admin-rooms' },
         },
+        {
+          path: 'chatbot',
+          name: 'admin-chatbot-setup',
+          component: () => import('../views/admin/ChatbotSetupView.vue'),
+          meta: { title: 'Chatbot Setup' },
+        },
       ],
     },
     {

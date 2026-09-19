@@ -23,7 +23,7 @@ const navItems: { label: string, icon: Component, routeName?: string }[] = [
   { label: 'Hotel Information', icon: IconHotel, routeName: 'admin-hotel-information' },
   { label: 'Room & Property', icon: IconCube, routeName: 'admin-rooms' },
   { label: 'Analytics Dashboard', icon: IconChartPie },
-  { label: 'Chatbot Setup', icon: IconChatText },
+  { label: 'Chatbot Setup', icon: IconChatText, routeName: 'admin-chatbot-setup' },
 ]
 
 // Plain sidebar-row look, without MenuLink's hover/active states.
