@@ -1,6 +1,7 @@
 package com.neatly.hotel.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -82,6 +83,13 @@ class RoomTypeAvailabilityTest {
 	}
 
 	@Test
+	void roomTypeIdsNarrowTheSearch() {
+		assertEquals(Map.of(family.getId(), 1L), available(1, 1, List.of(family.getId())));
+		assertEquals(Map.of(twin.getId(), 3L, family.getId(), 1L), available(1, 1, List.of(twin.getId(), family.getId())));
+		assertTrue(available(1, 1, List.of(new UUID(0, 1))).isEmpty());
+	}
+
+	@Test
 	void overlappingBookingsReduceAvailability() {
 		book(twin, IN.minusDays(1), IN.plusDays(1), BookingStatus.CONFIRMED, null);
 		book(twin, OUT.minusDays(1), OUT.plusDays(3), BookingStatus.CHECKED_IN, null);
@@ -116,7 +124,12 @@ class RoomTypeAvailabilityTest {
 	}
 
 	private Map<UUID, Long> available(int rooms, int guests) {
-		return repository.availability(IN, OUT, rooms, guests, NOW, HOLDING, BLOCKED).stream()
+		return available(rooms, guests, List.of());
+	}
+
+	private Map<UUID, Long> available(int rooms, int guests, List<UUID> types) {
+		return repository.availability(IN, OUT, rooms, guests, NOW, HOLDING, BLOCKED,
+				types.isEmpty(), types.isEmpty() ? List.of(new UUID(0, 0)) : types).stream()
 				.collect(Collectors.toMap(RoomTypeAvailability::roomTypeId, RoomTypeAvailability::availableUnits));
 	}
 

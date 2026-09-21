@@ -66,7 +66,9 @@ public class RoomController {
 			description = "Public. Room types with at least `rooms` bookable units free for the whole stay "
 					+ "[checkIn, checkOut) and `capacity × rooms ≥ guests`. A checkout day can be another stay's "
 					+ "check-in day. Dates are ISO (YYYY-MM-DD); checkIn must not be before today in hotel time "
-					+ "(Asia/Bangkok); stays are capped at 30 nights. Empty list when nothing is available. "
+					+ "(Asia/Bangkok); stays are capped at 30 nights. Repeat `roomTypeIds` to search only those "
+					+ "room types (up to 20; omit for all, unknown ids match nothing). "
+					+ "Empty list when nothing is available. "
 					+ "Rate limited per IP (429 + Retry-After).")
 	public ApiResponse<List<AvailableRoomResponse>> available(@ParameterObject @Valid @ModelAttribute RoomAvailabilityQuery query) {
 		return ApiResponse.ok(availabilityService.search(query));

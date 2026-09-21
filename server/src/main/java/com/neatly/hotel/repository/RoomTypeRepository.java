@@ -52,6 +52,7 @@ public interface RoomTypeRepository extends JpaRepository<RoomType, UUID> {
 			  and u.deletedAt is null
 			  and s.code not in :blockedStatuses
 			  and t.capacity * :rooms >= :guests
+			  and (:allTypes = true or t.id in :roomTypeIds)
 			group by t.id
 			""")
 	List<RoomTypeAvailability> availability(
@@ -61,7 +62,9 @@ public interface RoomTypeRepository extends JpaRepository<RoomType, UUID> {
 			@Param("guests") int guests,
 			@Param("now") Instant now,
 			@Param("holdingStatuses") Collection<BookingStatus> holdingStatuses,
-			@Param("blockedStatuses") Collection<String> blockedStatuses);
+			@Param("blockedStatuses") Collection<String> blockedStatuses,
+			@Param("allTypes") boolean allTypes,
+			@Param("roomTypeIds") Collection<UUID> roomTypeIds);
 
 	/** Units of a room type that can be sold: not deleted and not in {@code blockedStatuses}. */
 	@Query("""
