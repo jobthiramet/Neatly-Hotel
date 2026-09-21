@@ -117,16 +117,27 @@ const refundLines = computed(() => {
   )
 })
 
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+async function goToPage(page: number) {
+  if (page === currentPage.value || page < 1 || page > totalPages.value)
+    return
+  currentPage.value = page
+  await nextTick()
+  document.getElementById('booking-history-title')?.scrollIntoView({
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    block: 'start',
+  })
+}
+
 function prevPage() {
-  if (currentPage.value > 1) {
-    currentPage.value--
-  }
+  void goToPage(currentPage.value - 1)
 }
 
 function nextPage() {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++
-  }
+  void goToPage(currentPage.value + 1)
 }
 
 async function focusBooking() {
@@ -168,7 +179,7 @@ watch(isLoaded, (ready) => {
       >
         <h1
           id="booking-history-title"
-          class="font-serif text-h3 text-green-800 lg:text-h2 lg:text-green-700"
+          class="scroll-mt-24 font-serif text-h3 text-green-800 lg:text-h2 lg:text-green-700"
         >
           Booking History
         </h1>
@@ -412,7 +423,7 @@ watch(isLoaded, (ready) => {
               ? 'border border-gray-300 bg-white font-semibold text-green-700'
               : 'cursor-pointer text-gray-600 is-hover:text-black'"
             :aria-current="page === currentPage ? 'page' : undefined"
-            @click="currentPage = page"
+            @click="goToPage(page)"
           >
             {{ page }}
           </button>
