@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
+import { IconEdit, IconTrash } from '@/components/icons'
 import { Badge, roomStatusTone, type RoomStatus } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -15,31 +17,94 @@ import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiErrorMessage } from '@/stores/hotel'
-import { useRoomUnitsStore } from '@/stores/roomUnits'
+import { useRoomUnitsStore, type RoomUnitResponse } from '@/stores/roomUnits'
 import { BED_TYPE_LABELS, useRoomsStore } from '@/stores/rooms'
 
 const PAGE_SIZE = 10
+
+/** Figma status badges → `room_statuses.code` (1:1). Occupancy prefix is Vacant* because list API reports occupied=false. */
+const FIGMA_STATUS_TO_CODE: Partial<Record<RoomStatus, string>> = {
+  'Assign Clean': 'ASSIGN_CLEAN',
+  'Assign Dirty': 'ASSIGN_DIRTY',
+  'Vacant Clean': 'CLEAN',
+  'Vacant Clean Inspected': 'CLEAN_INSPECTED',
+  'Vacant Clean Pick Up': 'CLEAN_PICK_UP',
+  'Occupied Dirty': 'DIRTY',
+  'Out of Order': 'OUT_OF_ORDER',
+  'Out of Service': 'OUT_OF_SERVICE',
+  'Out of Inventory': 'OUT_OF_INVENTORY',
+}
+
+const FIGMA_STATUS_OPTIONS = (Object.keys(roomStatusTone) as RoomStatus[])
+  .filter(status => status in FIGMA_STATUS_TO_CODE)
 
 const roomUnitsStore = useRoomUnitsStore()
 const roomsStore = useRoomsStore()
 
 const search = ref('')
 const page = ref(1)
-const createOpen = ref(false)
+const formOpen = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const editingId = ref<string | null>(null)
+const deleteOpen = ref(false)
+const deletingRoom = ref<RoomUnitResponse | null>(null)
 const saving = ref(false)
+const deleting = ref(false)
+const statusSearch = ref('')
 const roomTypes = ref<{ id: string, name: string, bedType: keyof typeof BED_TYPE_LABELS }[]>([])
 
 const form = reactive({
   roomNumber: '',
   roomTypeId: '' as string,
-  statusCode: '' as string,
+  statusBadge: '' as RoomStatus | '',
 })
 
-const errors = reactive<Partial<Record<keyof typeof form, string>>>({})
+const errors = reactive<Partial<Record<'roomNumber' | 'roomTypeId' | 'statusBadge', string>>>({})
+
+const availableStatusCodes = computed(() =>
+  new Set(roomUnitsStore.statuses.map(s => s.code.toUpperCase())),
+)
+
+const statusOptions = computed(() =>
+  FIGMA_STATUS_OPTIONS
+    .map(status => ({ status, code: FIGMA_STATUS_TO_CODE[status]! }))
+    .filter(option => availableStatusCodes.value.has(option.code.toUpperCase())),
+)
+
+const filteredStatusOptions = computed(() => {
+  const q = statusSearch.value.trim().toLowerCase()
+  const selected = form.statusBadge
+  const options = !q
+    ? statusOptions.value
+    : statusOptions.value.filter(option =>
+        option.status.toLowerCase().includes(q)
+        || option.status === selected,
+      )
+  return options
+})
+
+const selectedStatusCode = computed(() => {
+  const match = statusOptions.value.find(option => option.status === form.statusBadge)
+  return match?.code ?? ''
+})
+
+function onStatusSelect(value: string | number | bigint | Record<string, unknown> | null) {
+  const next = value == null ? '' : String(value)
+  form.statusBadge = isRoomStatus(next) ? next : ''
+  statusSearch.value = ''
+  errors.statusBadge = undefined
+}
 
 const selectedBedTypeLabel = computed(() => {
   const type = roomTypes.value.find(t => t.id === form.roomTypeId)
   return type ? BED_TYPE_LABELS[type.bedType] : ''
+})
+
+const formTitle = computed(() => formMode.value === 'create' ? 'Create Room' : 'Edit Room')
+const submitLabel = computed(() => {
+  if (saving.value)
+    return formMode.value === 'create' ? 'Creating…' : 'Saving…'
+  return formMode.value === 'create' ? 'Create' : 'Save'
 })
 
 const filteredRooms = computed(() => {
@@ -99,52 +164,110 @@ onMounted(async () => {
   }
 })
 
+function defaultStatusBadge(): RoomStatus | '' {
+  return statusOptions.value.find(option => option.status === 'Vacant Clean')?.status
+    ?? statusOptions.value[0]?.status
+    ?? ''
+}
+
+function statusBadgeForRoom(room: RoomUnitResponse): RoomStatus | '' {
+  if (isRoomStatus(room.displayStatus) && statusOptions.value.some(o => o.status === room.displayStatus))
+    return room.displayStatus
+  const code = room.statusCode.toUpperCase()
+  return statusOptions.value.find(option => option.code.toUpperCase() === code)?.status ?? ''
+}
+
 function resetForm() {
   form.roomNumber = ''
   form.roomTypeId = ''
-  form.statusCode = roomUnitsStore.statuses.find(s => s.code === 'CLEAN')?.code ?? ''
+  form.statusBadge = defaultStatusBadge()
+  statusSearch.value = ''
   errors.roomNumber = undefined
   errors.roomTypeId = undefined
-  errors.statusCode = undefined
+  errors.statusBadge = undefined
+  editingId.value = null
 }
 
 function openCreate() {
+  formMode.value = 'create'
   resetForm()
-  createOpen.value = true
+  formOpen.value = true
 }
 
-function onRoomNumberInput(event: Event) {
-  const input = event.target as HTMLInputElement
-  form.roomNumber = input.value.replace(/\D/g, '').slice(0, 4)
+function openEdit(room: RoomUnitResponse) {
+  formMode.value = 'edit'
+  editingId.value = room.id
+  form.roomNumber = room.roomNumber
+  form.roomTypeId = room.roomTypeId
+  form.statusBadge = statusBadgeForRoom(room)
+  statusSearch.value = ''
+  errors.roomNumber = undefined
+  errors.roomTypeId = undefined
+  errors.statusBadge = undefined
+  formOpen.value = true
+}
+
+function openDelete(room: RoomUnitResponse) {
+  deletingRoom.value = room
+  deleteOpen.value = true
+}
+
+function onRoomNumberInput(value: string | number) {
+  form.roomNumber = String(value ?? '').replace(/\D/g, '').slice(0, 4)
 }
 
 function validate() {
   const number = form.roomNumber.trim()
   errors.roomNumber = /^\d{4}$/.test(number) ? undefined : 'Room number must be exactly 4 digits.'
   errors.roomTypeId = form.roomTypeId ? undefined : 'Room type is required.'
-  errors.statusCode = form.statusCode ? undefined : 'Status is required.'
-  return !errors.roomNumber && !errors.roomTypeId && !errors.statusCode
+  errors.statusBadge = selectedStatusCode.value ? undefined : 'Status is required.'
+  return !errors.roomNumber && !errors.roomTypeId && !errors.statusBadge
 }
 
-async function submitCreate() {
+async function submitForm() {
   if (!validate())
     return
   saving.value = true
+  const payload = {
+    roomNumber: form.roomNumber.trim(),
+    roomTypeId: form.roomTypeId,
+    statusCode: selectedStatusCode.value,
+  }
   try {
-    await roomUnitsStore.create({
-      roomNumber: form.roomNumber.trim(),
-      roomTypeId: form.roomTypeId,
-      statusCode: form.statusCode,
-    })
-    createOpen.value = false
+    if (formMode.value === 'create') {
+      await roomUnitsStore.create(payload)
+      toast.success('Room created')
+    }
+    else if (editingId.value) {
+      await roomUnitsStore.update(editingId.value, payload)
+      toast.success('Room updated')
+    }
+    formOpen.value = false
     resetForm()
-    toast.success('Room created')
   }
   catch (e) {
-    toast.error(apiErrorMessage(e, 'Could not create room.'))
+    toast.error(apiErrorMessage(e, formMode.value === 'create' ? 'Could not create room.' : 'Could not update room.'))
   }
   finally {
     saving.value = false
+  }
+}
+
+async function confirmDelete() {
+  if (!deletingRoom.value)
+    return
+  deleting.value = true
+  try {
+    await roomUnitsStore.remove(deletingRoom.value.id)
+    deleteOpen.value = false
+    deletingRoom.value = null
+    toast.success('Room deleted')
+  }
+  catch (e) {
+    toast.error(apiErrorMessage(e, 'Could not delete room.'))
+  }
+  finally {
+    deleting.value = false
   }
 }
 
@@ -155,39 +278,16 @@ function isRoomStatus(value: string): value is RoomStatus {
 
 <template>
   <Teleport defer to="#admin-header-actions">
-    <div class="flex flex-wrap items-center justify-end gap-4">
-      <label class="relative block w-56 max-w-full">
-        <span class="sr-only">Search rooms</span>
-        <svg
-          class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-gray-500"
-          viewBox="0 0 20 20"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M9 15.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Zm7 1.5-3.5-3.5"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-        <Input
-          v-model="search"
-          type="search"
-          placeholder="Search…"
-          class="h-10 pl-9"
-        />
-      </label>
-      <div
-        class="flex size-10 items-center justify-center rounded-full bg-orange-400 text-body2 font-medium text-white"
-        aria-hidden="true"
-      >
-        W
-      </div>
-      <Button type="button" @click="openCreate">
-        + Create Room
-      </Button>
-    </div>
+    <Input
+      v-model="search"
+      type="search"
+      placeholder="Search..."
+      aria-label="Search rooms"
+      class="w-80"
+    />
+    <Button type="button" @click="openCreate">
+      + Create Room
+    </Button>
   </Teleport>
 
   <div
@@ -206,50 +306,80 @@ function isRoomStatus(value: string): value is RoomStatus {
     {{ roomUnitsStore.error }}
   </div>
 
-  <div v-else class="overflow-hidden rounded-sm bg-white shadow-md">
-    <div class="overflow-x-auto">
-      <table class="w-full min-w-3xl border-collapse text-left">
-        <thead>
-          <tr class="border-b border-gray-300 bg-gray-100 text-body2 text-gray-800">
-            <th class="px-6 py-4 font-medium">
+  <template v-else>
+    <div class="overflow-x-auto rounded-sm bg-white">
+      <table class="w-full min-w-200 table-fixed text-left text-body2 text-black">
+        <colgroup>
+          <col class="w-28">
+          <col class="w-2/5">
+          <col>
+          <col>
+          <col class="w-28">
+        </colgroup>
+        <thead class="bg-gray-300 text-gray-800">
+          <tr>
+            <th scope="col" class="px-4 py-2.5 font-medium">
               Room no.
             </th>
-            <th class="px-6 py-4 font-medium">
+            <th scope="col" class="px-4 py-2.5 font-medium">
               Room type
             </th>
-            <th class="px-6 py-4 font-medium">
+            <th scope="col" class="px-4 py-2.5 font-medium">
               Bed Type
             </th>
-            <th class="px-6 py-4 font-medium">
+            <th scope="col" class="px-4 py-2.5 font-medium">
               Status
+            </th>
+            <th scope="col" class="px-4 py-2.5 font-medium">
+              Update
             </th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="pagedRooms.length === 0">
-            <td colspan="4" class="px-6 py-10 text-body1 text-gray-600">
+            <td colspan="5" class="px-4 py-10 text-center text-body1 text-gray-700">
               No rooms found. Create the first room to get started.
             </td>
           </tr>
           <tr
             v-for="room in pagedRooms"
             :key="room.id"
-            class="border-b border-gray-200 text-body1 text-gray-800 last:border-b-0"
+            class="border-t border-gray-200 is-hover:bg-gray-100"
           >
-            <td class="px-6 py-4">
+            <td class="px-4 py-4">
               {{ room.roomNumber }}
             </td>
-            <td class="px-6 py-4">
+            <td class="px-4 py-4">
               {{ room.roomTypeName }}
             </td>
-            <td class="px-6 py-4">
+            <td class="px-4 py-4">
               {{ BED_TYPE_LABELS[room.bedType] }}
             </td>
-            <td class="px-6 py-4">
+            <td class="px-4 py-4">
               <Badge v-if="isRoomStatus(room.displayStatus)" :status="room.displayStatus" />
               <Badge v-else tone="neutral">
                 {{ room.displayStatus }}
               </Badge>
+            </td>
+            <td class="px-4 py-4">
+              <div class="flex items-center gap-1">
+                <button
+                  type="button"
+                  class="flex size-8 items-center justify-center text-orange-500 outline-none is-hover:text-orange-600 is-focus:ring-2 is-focus:ring-ring"
+                  :aria-label="`Edit room ${room.roomNumber}`"
+                  @click="openEdit(room)"
+                >
+                  <IconEdit class="size-5" />
+                </button>
+                <button
+                  type="button"
+                  class="flex size-8 items-center justify-center text-red outline-none is-hover:text-red is-focus:ring-2 is-focus:ring-ring"
+                  :aria-label="`Delete room ${room.roomNumber}`"
+                  @click="openDelete(room)"
+                >
+                  <IconTrash class="size-5" />
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -258,7 +388,7 @@ function isRoomStatus(value: string): value is RoomStatus {
 
     <nav
       v-if="filteredRooms.length > 0"
-      class="flex items-center justify-center gap-2 border-t border-gray-200 px-4 py-6"
+      class="mt-10 flex items-center justify-center gap-2"
       aria-label="Pagination"
     >
       <Button
@@ -293,26 +423,73 @@ function isRoomStatus(value: string): value is RoomStatus {
         ›
       </Button>
     </nav>
-  </div>
+  </template>
 
-  <Dialog v-model:open="createOpen">
-    <DialogContent class="w-11/12 sm:max-w-lg">
+  <Dialog v-model:open="formOpen">
+    <DialogContent class="w-11/12 max-w-md">
       <DialogHeader>
-        <DialogTitle>Create Room</DialogTitle>
+        <DialogTitle>{{ formTitle }}</DialogTitle>
       </DialogHeader>
 
-      <form id="create-room-form" class="flex flex-col gap-4" @submit.prevent="submitCreate">
+      <form
+        id="room-unit-form"
+        class="grid grid-cols-1 gap-4 px-6 py-6 sm:grid-cols-2"
+        @submit.prevent="submitForm"
+      >
         <FormField label="Room no." for="room-number" :error="errors.roomNumber">
           <Input
             id="room-number"
             :model-value="form.roomNumber"
+            type="text"
             inputmode="numeric"
+            pattern="[0-9]*"
             maxlength="4"
-            placeholder="0001"
+            autocomplete="off"
+            placeholder=""
             :aria-invalid="!!errors.roomNumber"
             required
-            @input="onRoomNumberInput"
+            @update:model-value="onRoomNumberInput"
           />
+        </FormField>
+
+        <FormField label="Status" for="room-status" :error="errors.statusBadge">
+          <Select
+            :model-value="form.statusBadge || undefined"
+            @update:model-value="onStatusSelect"
+          >
+            <SelectTrigger id="room-status" class="h-auto min-h-11" :aria-invalid="!!errors.statusBadge">
+              <span class="flex min-w-0 flex-1 items-center">
+                <Badge v-if="isRoomStatus(form.statusBadge)" :status="form.statusBadge" />
+                <span v-else class="text-body1 text-gray-600">Select status</span>
+              </span>
+              <SelectValue class="sr-only" :placeholder="form.statusBadge || 'Select status'" />
+            </SelectTrigger>
+            <SelectContent class="min-w-64">
+              <div class="sticky top-0 z-10 bg-white px-3 pb-2" @keydown.stop @pointerdown.stop>
+                <Input
+                  v-model="statusSearch"
+                  type="search"
+                  placeholder="Search status…"
+                  class="h-9"
+                  aria-label="Search status"
+                />
+              </div>
+              <SelectItem
+                v-for="option in filteredStatusOptions"
+                :key="option.status"
+                :value="option.status"
+                class="py-2.5"
+              >
+                <Badge :status="option.status" />
+              </SelectItem>
+              <p
+                v-if="filteredStatusOptions.length === 0"
+                class="px-4 py-3 text-body2 text-gray-600"
+              >
+                No status found.
+              </p>
+            </SelectContent>
+          </Select>
         </FormField>
 
         <FormField label="Room type" for="room-type" :error="errors.roomTypeId">
@@ -336,33 +513,37 @@ function isRoomStatus(value: string): value is RoomStatus {
             disabled
           />
         </FormField>
-
-        <FormField label="Status" for="room-status" :error="errors.statusCode">
-          <Select v-model="form.statusCode">
-            <SelectTrigger id="room-status" :aria-invalid="!!errors.statusCode">
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                v-for="option in roomUnitsStore.statuses"
-                :key="option.code"
-                :value="option.code"
-              >
-                {{ option.label }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </FormField>
       </form>
 
-      <DialogFooter>
+      <DialogFooter class="border-t border-gray-300 pt-6">
         <DialogClose as-child>
           <Button type="button" variant="secondary" :disabled="saving">
             Cancel
           </Button>
         </DialogClose>
-        <Button type="submit" form="create-room-form" :disabled="saving">
-          {{ saving ? 'Creating…' : 'Create' }}
+        <Button type="submit" form="room-unit-form" :disabled="saving">
+          {{ submitLabel }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog v-model:open="deleteOpen">
+    <DialogContent class="w-11/12 sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Delete room</DialogTitle>
+        <DialogDescription>
+          Delete room {{ deletingRoom?.roomNumber }}? This cannot be undone from the list.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <DialogClose as-child>
+          <Button type="button" variant="secondary" :disabled="deleting">
+            Cancel
+          </Button>
+        </DialogClose>
+        <Button type="button" variant="secondary" :disabled="deleting" @click="confirmDelete">
+          {{ deleting ? 'Deleting…' : 'Delete' }}
         </Button>
       </DialogFooter>
     </DialogContent>
