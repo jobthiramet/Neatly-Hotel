@@ -69,7 +69,7 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
       <h1 id="hero-title" class="max-w-73 text-center font-serif text-h3 text-white md:max-w-150 lg:max-w-200 lg:text-h1">
         A Best Place for Your Neatly Experience
       </h1>
-      <RoomSearchForm class="mt-12 w-full max-w-280 lg:mt-16" @search="search" />
+      <RoomSearchForm class="mt-12 w-full max-w-288 lg:mt-16" @search="search" />
     </section>
 
     <!-- About: one screen on desktop; photos shrink so the full description fits (a very long one grows the section) -->

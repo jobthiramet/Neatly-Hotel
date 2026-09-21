@@ -17,6 +17,8 @@ const props = withDefaults(defineProps<{
   invalid?: boolean
   minValue?: DateValue
   maxValue?: DateValue
+  /** `compact` drops the weekday ("21 Sept 2026"), for rows that are tight on width. */
+  format?: 'weekday' | 'compact'
   /** Header year select range when `minValue`/`maxValue` aren't set. */
   yearRange?: [number, number]
   ariaDescribedby?: string
@@ -47,8 +49,13 @@ function onSelect(date: DateValue | undefined) {
   open.value = false
 }
 
-const formatter = new DateFormatter('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-const label = computed(() => value.value ? formatter.format(value.value.toDate(getLocalTimeZone())) : undefined)
+const formatters = {
+  weekday: new DateFormatter('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+  compact: new DateFormatter('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+}
+const label = computed(() => value.value
+  ? formatters[props.format ?? 'weekday'].format(value.value.toDate(getLocalTimeZone()))
+  : undefined)
 </script>
 
 <!-- Figma: input style / style=date picker (12:365) + Date Picker (106:4311) -->
@@ -63,7 +70,7 @@ const label = computed(() => value.value ? formatter.format(value.value.toDate(g
         :aria-describedby="ariaDescribedby"
         data-slot="date-picker-trigger"
         :class="cn(
-          'flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm border border-input bg-white py-2.75 pr-3.75 pl-2.75 text-left text-body1 tracking-normal text-black transition-colors outline-none is-focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-600 aria-invalid:border-red data-[state=open]:border-orange-500',
+          'flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm border border-input bg-white py-2.75 pr-3.75 pl-2.75 text-left text-body1 tracking-normal whitespace-nowrap text-black transition-colors outline-none is-focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-600 aria-invalid:border-red data-[state=open]:border-orange-500',
           !label && 'text-gray-600',
           props.class,
         )"
