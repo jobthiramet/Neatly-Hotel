@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,7 +52,7 @@ class RoomAvailabilityServiceImplTest {
 		RoomType cheap = room("Superior", "2500");
 		RoomType pricey = room("Suite", "9000");
 		RoomType full = room("Deluxe", "4000");
-		when(repository.availability(any(), any(), anyInt(), anyInt(), any(), any(), any())).thenReturn(List.of(
+		when(repository.availability(any(), any(), anyInt(), anyInt(), any(), any(), any(), anyBoolean(), any())).thenReturn(List.of(
 				new RoomTypeAvailability(pricey.getId(), 3, 1),
 				new RoomTypeAvailability(cheap.getId(), 5, 0),
 				new RoomTypeAvailability(full.getId(), 4, 3)));
@@ -64,8 +66,33 @@ class RoomAvailabilityServiceImplTest {
 	}
 
 	@Test
+	void roomTypeIdsAreForwardedAndAbsenceMeansEveryType() {
+		RoomType picked = room("Suite", "9000");
+		when(repository.availability(any(), any(), anyInt(), anyInt(), any(), any(), any(), anyBoolean(), any()))
+				.thenReturn(List.of(new RoomTypeAvailability(picked.getId(), 2, 0)));
+		when(repository.findByIdIn(Set.of(picked.getId()))).thenReturn(List.of(picked));
+
+		// no ids: the query is told to ignore the filter
+		service.search(query(TODAY, TODAY.plusDays(1), 1, 1));
+		verify(repository).availability(any(), any(), anyInt(), anyInt(), any(), any(), any(), eq(true), any());
+
+		// one id: forwarded as the filter, and only that type comes back
+		List<AvailableRoomResponse> result = service.search(
+				new RoomAvailabilityQuery(TODAY, TODAY.plusDays(1), 1, 1, List.of(picked.getId())));
+		assertEquals(List.of("Suite"), result.stream().map(AvailableRoomResponse::name).toList());
+		verify(repository).availability(any(), any(), anyInt(), anyInt(), any(), any(), any(), eq(false),
+				eq(List.of(picked.getId())));
+
+		// an unknown id matches nothing: the query returns no rows, so the page is empty
+		when(repository.availability(any(), any(), anyInt(), anyInt(), any(), any(), any(), anyBoolean(), any()))
+				.thenReturn(List.of());
+		assertTrue(service.search(new RoomAvailabilityQuery(TODAY, TODAY.plusDays(1), 1, 1, List.of(UUID.randomUUID())))
+				.isEmpty());
+	}
+
+	@Test
 	void nothingAvailableIsAnEmptyList() {
-		when(repository.availability(any(), any(), anyInt(), anyInt(), any(), any(), any())).thenReturn(List.of());
+		when(repository.availability(any(), any(), anyInt(), anyInt(), any(), any(), any(), anyBoolean(), any())).thenReturn(List.of());
 
 		assertTrue(service.search(query(TODAY, TODAY.plusDays(1), 1, 1)).isEmpty());
 		verify(repository, never()).findByIdIn(any());
@@ -94,7 +121,9 @@ class RoomAvailabilityServiceImplTest {
 		assertEquals(Set.of("checkOutValid"), fields(query(TODAY, TODAY, 1, 1)));
 		assertEquals(Set.of("rooms", "guests"), fields(query(TODAY, TODAY.plusDays(1), 0, 7)));
 		assertEquals(Set.of("rooms"), fields(query(TODAY, TODAY.plusDays(1), 11, 1)));
-		assertEquals(Set.of("checkIn", "checkOut", "rooms", "guests"), fields(new RoomAvailabilityQuery(null, null, null, null)));
+		assertEquals(Set.of("checkIn", "checkOut", "rooms", "guests"), fields(new RoomAvailabilityQuery(null, null, null, null, null)));
+		assertEquals(Set.of("roomTypeIds"), fields(new RoomAvailabilityQuery(TODAY, TODAY.plusDays(1), 1, 1,
+				java.util.stream.Stream.generate(UUID::randomUUID).limit(21).toList())));
 		assertTrue(fields(query(TODAY, TODAY.plusDays(1), 10, 6)).isEmpty());
 	}
 
@@ -106,7 +135,7 @@ class RoomAvailabilityServiceImplTest {
 	}
 
 	private static RoomAvailabilityQuery query(LocalDate checkIn, LocalDate checkOut, int rooms, int guests) {
-		return new RoomAvailabilityQuery(checkIn, checkOut, rooms, guests);
+		return new RoomAvailabilityQuery(checkIn, checkOut, rooms, guests, null);
 	}
 
 	private static RoomType room(String name, String price) {

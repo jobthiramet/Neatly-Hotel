@@ -8,10 +8,14 @@ export interface RoomSearchQuery {
   checkOut: DateValue
   rooms: number
   guests: number
+  /** Room type ids to search; empty means every type. */
+  types: string[]
 }
 
 /** Longest stay the API accepts (`app.search.max-nights`). */
 export const MAX_NIGHTS = 30
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** `/search` URL query for a search; ISO dates keep it shareable. */
 export function toSearchRouteQuery(query: RoomSearchQuery) {
@@ -20,6 +24,7 @@ export function toSearchRouteQuery(query: RoomSearchQuery) {
     checkOut: query.checkOut.toString(),
     rooms: String(query.rooms),
     guests: String(query.guests),
+    ...(query.types.length ? { types: query.types.join(',') } : {}),
   }
 }
 
@@ -37,7 +42,11 @@ export function fromSearchRouteQuery(query: Record<string, unknown>): Partial<Ro
     const number = Number(value)
     return Number.isInteger(number) && number > 0 ? number : undefined
   }
-  return { checkIn: date(query.checkIn), checkOut: date(query.checkOut), rooms: count(query.rooms), guests: count(query.guests) }
+  // Only real ids reach the API; mock slugs and junk are dropped instead of 400ing.
+  const types = typeof query.types === 'string'
+    ? query.types.split(',').filter(value => UUID_RE.test(value))
+    : []
+  return { checkIn: date(query.checkIn), checkOut: date(query.checkOut), rooms: count(query.rooms), guests: count(query.guests), types }
 }
 
 /** Field errors for a search, or `{}` when it can be sent. */
@@ -61,11 +70,13 @@ export function validateSearch(query: Partial<RoomSearchQuery>) {
 </script>
 
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { FormField } from '@/components/ui/form-field'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useRoomsStore } from '@/stores/rooms'
 import { cn } from '@/lib/utils'
 
 const props = withDefaults(defineProps<{
@@ -92,12 +103,23 @@ const minDate = today(getLocalTimeZone())
 const checkIn = shallowRef<DateValue | undefined>()
 const checkOut = shallowRef<DateValue | undefined>()
 const occupancy = ref('1-2')
+const selectedTypes = ref<string[]>([])
 const submitted = ref(false)
+
+// Options come from the rooms API once per session; ids in the URL that no longer exist are dropped.
+const roomsStore = useRoomsStore()
+const typeOptions = computed(() => roomsStore.roomTypes.map(type => ({ value: type.id, label: type.name })))
+onMounted(() => roomsStore.types().catch(() => {}))
+watch(typeOptions, (options) => {
+  if (options.length)
+    selectedTypes.value = selectedTypes.value.filter(id => options.some(option => option.value === id))
+})
 
 function reset(initial: Partial<RoomSearchQuery> | undefined) {
   checkIn.value = initial ? initial.checkIn : minDate
   checkOut.value = initial ? initial.checkOut : minDate.add({ days: 1 })
   occupancy.value = initial?.rooms && initial.guests ? `${initial.rooms}-${initial.guests}` : '1-2'
+  selectedTypes.value = initial?.types ?? []
   submitted.value = !!initial
 }
 // Back/forward on /search changes `initial` without remounting.
@@ -119,7 +141,7 @@ watch(checkIn, (value) => {
 
 const current = computed(() => {
   const [rooms, guests] = occupancy.value.split('-').map(Number)
-  return { checkIn: checkIn.value, checkOut: checkOut.value, rooms, guests }
+  return { checkIn: checkIn.value, checkOut: checkOut.value, rooms, guests, types: selectedTypes.value }
 })
 const errors = computed(() => submitted.value ? validateSearch(current.value) : {})
 
@@ -138,25 +160,27 @@ function submit() {
     novalidate
     :class="cn(
       'flex flex-col gap-4 lg:flex-row lg:items-start',
-      variant === 'hero' ? 'rounded-sm bg-white p-4 shadow-md lg:gap-10 lg:p-15' : 'lg:gap-10',
+      variant === 'hero' ? 'rounded-sm bg-white p-4 shadow-md lg:gap-4 lg:p-10 xl:gap-10' : 'lg:gap-4 xl:gap-10',
     )"
     @submit.prevent="submit"
   >
-    <div class="flex flex-col gap-4 lg:flex-2 lg:flex-row lg:items-start lg:gap-6">
-      <FormField label="Check In" for="check-in" :error="errors.checkIn">
+    <div class="flex flex-col gap-4 lg:flex-2 lg:flex-row lg:items-start lg:gap-4 xl:gap-6">
+      <FormField label="Check In" for="check-in" :error="errors.checkIn" class="lg:min-w-40">
         <DatePicker
           id="check-in"
           v-model="checkIn"
+          format="compact"
           :min-value="minDate"
           :invalid="!!errors.checkIn"
           :aria-describedby="errors.checkIn ? 'check-in-error' : undefined"
         />
       </FormField>
       <span aria-hidden="true" class="hidden pt-10 text-body1 text-gray-900 lg:block">-</span>
-      <FormField label="Check Out" for="check-out" :error="errors.checkOut">
+      <FormField label="Check Out" for="check-out" :error="errors.checkOut" class="lg:min-w-40">
         <DatePicker
           id="check-out"
           v-model="checkOut"
+          format="compact"
           :min-value="(checkIn ?? minDate).add({ days: 1 })"
           :max-value="(checkIn ?? minDate).add({ days: MAX_NIGHTS })"
           :invalid="!!errors.checkOut"
@@ -165,7 +189,7 @@ function submit() {
       </FormField>
     </div>
 
-    <FormField label="Rooms & Guests" for="occupancy" :error="errors.occupancy" class="lg:flex-1">
+    <FormField label="Rooms & Guests" for="occupancy" :error="errors.occupancy" class="lg:min-w-0 lg:flex-1">
       <Select v-model="occupancy">
         <SelectTrigger id="occupancy">
           <SelectValue />
@@ -178,10 +202,20 @@ function submit() {
       </Select>
     </FormField>
 
+    <FormField label="Room Types" for="room-types" class="lg:min-w-0 lg:flex-1">
+      <MultiSelect
+        id="room-types"
+        v-model="selectedTypes"
+        :options="typeOptions"
+        all-label="All room types"
+        :count-label="count => count === 1 ? '1 room type selected' : `${count} room types selected`"
+      />
+    </FormField>
+
     <Button
       type="submit"
       :variant="variant === 'bar' ? 'secondary' : 'primary'"
-      class="mt-2 lg:mt-7 lg:w-36"
+      class="mt-2 lg:mt-7 lg:w-32 xl:w-36"
     >
       Search
     </Button>

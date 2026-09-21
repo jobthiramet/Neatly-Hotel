@@ -19,7 +19,16 @@ const roomsStore = useRoomsStore()
 const initial = computed(() => fromSearchRouteQuery(route.query))
 const valid = computed(() => Object.keys(validateSearch(initial.value)).length === 0)
 const apiQuery = computed(() => valid.value ? toSearchRouteQuery(initial.value as RoomSearchQuery) : null)
-const params = computed(() => apiQuery.value && { ...apiQuery.value, rooms: Number(apiQuery.value.rooms), guests: Number(apiQuery.value.guests) })
+// Ids that no longer exist are dropped, so the results match what the filter shows.
+const knownTypes = computed(() => new Set(roomsStore.roomTypes.map(type => type.id)))
+const typesReady = computed(() => roomsStore.roomTypes.length > 0)
+const params = computed(() => apiQuery.value && {
+  checkIn: apiQuery.value.checkIn,
+  checkOut: apiQuery.value.checkOut,
+  rooms: Number(apiQuery.value.rooms),
+  guests: Number(apiQuery.value.guests),
+  roomTypeIds: (initial.value.types ?? []).filter(id => knownTypes.value.has(id)),
+})
 
 const rooms = ref<AvailableRoom[]>([])
 const loading = ref(false)
@@ -29,6 +38,12 @@ let latest = 0
 async function load() {
   const query = params.value
   error.value = ''
+  // With a filter in the URL, wait for the type list so unknown ids are dropped first.
+  // Stay in the loading state meanwhile: an empty list here is not "nothing available".
+  if (query && initial.value.types?.length && !typesReady.value) {
+    loading.value = true
+    return
+  }
   if (!query) {
     rooms.value = []
     return
@@ -53,7 +68,7 @@ async function load() {
       loading.value = false
   }
 }
-watch(apiQuery, load, { immediate: true, deep: true })
+watch([apiQuery, typesReady], load, { immediate: true, deep: true })
 
 function search(query: RoomSearchQuery) {
   const next = toSearchRouteQuery(query)

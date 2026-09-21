@@ -1,8 +1,7 @@
 <!-- Figma: user > room detail (102:2788 desktop) & mobile > user > room detail -->
 <script setup lang="ts">
-import { getLocalTimeZone, today } from '@internationalized/date'
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget.vue'
 import { IconArrowRight } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
@@ -14,7 +13,6 @@ import { defaultRoomId, type RoomDetail, roomDetails } from '@/data/rooms'
 import { BED_TYPE_LABELS, type RoomResponse, useRoomsStore } from '@/stores/rooms'
 
 const route = useRoute()
-const router = useRouter()
 
 // ── Active Room Data ────────────────────────────────────────────────────────
 // A UUID (e.g. from Search Result) loads the real room; mock slugs keep using data/rooms.
@@ -95,21 +93,17 @@ function formatPrice(amount: number) {
   })
 }
 
-// Opened from Search Result: keep the searched stay; otherwise default to tonight for 2 guests.
-function handleBookNow() {
-  const checkIn = today(getLocalTimeZone())
-  const { checkIn: searchedIn, checkOut: searchedOut, rooms, guests } = route.query
-  router.push({
-    name: 'booking',
-    query: {
-      roomId: activeRoomId.value,
-      checkIn: typeof searchedIn === 'string' ? searchedIn : checkIn.toString(),
-      checkOut: typeof searchedOut === 'string' ? searchedOut : checkIn.add({ days: 1 }).toString(),
-      ...(typeof rooms === 'string' ? { rooms } : {}),
-      guests: typeof guests === 'string' ? guests : '2',
-    },
-  })
-}
+// Book Now opens the search page with this room type preselected, carrying over an
+// active search (the params this page was opened with) when there is one.
+const searchLink = computed(() => {
+  const carried = ['checkIn', 'checkOut', 'rooms', 'guests']
+    .filter(key => typeof route.query[key] === 'string')
+    .map(key => [key, route.query[key] as string])
+  return {
+    name: 'search',
+    query: { ...Object.fromEntries(carried), types: activeRoomId.value },
+  }
+})
 </script>
 
 <template>
@@ -187,11 +181,10 @@ function handleBookNow() {
         </div>
 
         <!-- Book Now Button (full width on mobile, auto on desktop) -->
-        <Button
-          class="w-full px-8 py-4 sm:w-auto"
-          @click="handleBookNow"
-        >
-          Book Now
+        <Button as-child class="w-full px-8 py-4 sm:w-auto">
+          <RouterLink :to="searchLink">
+            Book Now
+          </RouterLink>
         </Button>
       </div>
 

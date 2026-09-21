@@ -191,9 +191,16 @@ Search Result page: room types that can be booked for a stay.
 | `rooms` | integer | 1–10 |
 | `guests` | integer | 1–6 |
 
+Optional:
+
+| Param | Type | Validation |
+| --- | --- | --- |
+| `roomTypeIds` | UUID, repeatable (`?roomTypeIds=…&roomTypeIds=…`) | At most 20. Omitted or empty searches every room type; ids that don't exist simply match nothing (no `400`) |
+
 - Availability rules:
   - **Bookable units** of a room type: non-deleted `room_units` whose status is not `OUT_OF_ORDER` or `OUT_OF_SERVICE`. Housekeeping statuses (clean, dirty, inspected, …) don't affect future stays.
   - **Booked units**: `booking_rooms` rows of that type whose booking overlaps the stay (`booking.check_in < checkOut AND booking.check_out > checkIn`) and is `CONFIRMED`, `CHECKED_IN`, or `PENDING_PAYMENT` with an unexpired hold. A checkout day can be another stay's check-in day. Bookings are counted per room type because `room_unit_id` stays null until a unit is assigned.
+  - Only the requested `roomTypeIds` are considered, when given.
   - A room type is returned when `bookable − booked ≥ rooms` and `capacity × rooms ≥ guests`. Soft-deleted room types never appear.
 - Response `200`: `ApiResponse<AvailableRoomResponse[]>`, cheapest `pricePerNight` first. **Empty array (not `404`) when nothing is available.**
 
@@ -618,6 +625,10 @@ Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
+
+### 2026-09-21
+
+- `GET /api/rooms/available` takes an optional repeatable `roomTypeIds` param (max 20) to search only those room types. Omitted or empty is unchanged; unknown ids match nothing.
 
 ### 2026-09-18
 

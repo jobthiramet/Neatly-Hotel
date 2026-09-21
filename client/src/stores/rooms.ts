@@ -1,5 +1,6 @@
 ﻿import { isAxiosError } from 'axios'
 import { defineStore } from 'pinia'
+import { ref } from 'vue'
 import { api } from '@/api/client'
 
 /** Types below match the Rooms section of docs/API.md. */
@@ -99,6 +100,23 @@ export function apiFieldErrors(error: unknown): Record<string, string> {
 }
 
 export const useRoomsStore = defineStore('rooms', () => {
+  // Room type options for the search filter; the list is small and rarely changes, so fetch it once.
+  const roomTypes = ref<RoomSummary[]>([])
+  let roomTypesRequest: Promise<RoomSummary[]> | null = null
+
+  function types() {
+    roomTypesRequest ??= list({ search: '', page: 0, size: 50 })
+      .then((page) => {
+        roomTypes.value = page.content
+        return page.content
+      })
+      .catch((error) => {
+        roomTypesRequest = null
+        throw error
+      })
+    return roomTypesRequest
+  }
+
   /** Pass `signal` to cancel a superseded request (e.g. while typing a search). */
   async function list(params: { search: string, page: number, size: number }, options: { signal?: AbortSignal } = {}) {
     const { data } = await api.get<ApiResponse<PageResponse<RoomSummary>>>('/rooms', { params, signal: options.signal })
@@ -106,8 +124,12 @@ export const useRoomsStore = defineStore('rooms', () => {
   }
 
   /** Dates are ISO `YYYY-MM-DD`. Empty array when nothing is available. */
-  async function available(params: { checkIn: string, checkOut: string, rooms: number, guests: number }) {
-    const { data } = await api.get<ApiResponse<AvailableRoom[]>>('/rooms/available', { params })
+  async function available(params: { checkIn: string, checkOut: string, rooms: number, guests: number, roomTypeIds?: string[] }) {
+    // Repeatable param: ?roomTypeIds=<id>&roomTypeIds=<id>
+    const { data } = await api.get<ApiResponse<AvailableRoom[]>>('/rooms/available', {
+      params,
+      paramsSerializer: { indexes: null },
+    })
     return data.data
   }
 
@@ -151,5 +173,5 @@ export const useRoomsStore = defineStore('rooms', () => {
     return data.data
   }
 
-  return { list, available, get, create, update, remove, uploadImage, removeImage, reorderImages }
+  return { roomTypes, types, list, available, get, create, update, remove, uploadImage, removeImage, reorderImages }
 })

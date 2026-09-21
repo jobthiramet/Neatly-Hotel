@@ -27,6 +27,9 @@ import com.neatly.hotel.repository.RoomTypeRepository;
 @Transactional(readOnly = true)
 public class RoomAvailabilityServiceImpl implements RoomAvailabilityService {
 
+	/** Placeholder so the unfiltered query never sends an empty IN list. */
+	private static final List<UUID> NO_FILTER = List.of(new UUID(0, 0));
+
 	/** Units in these statuses can't be sold. Housekeeping statuses (clean, dirty, …) don't matter for future stays. */
 	static final List<String> BLOCKED_STATUSES = List.of("OUT_OF_ORDER", "OUT_OF_SERVICE");
 
@@ -65,7 +68,9 @@ public class RoomAvailabilityServiceImpl implements RoomAvailabilityService {
 				query.guests(),
 				clock.instant(),
 				BookingServiceImpl.OCCUPYING,
-				BLOCKED_STATUSES).stream()
+				BLOCKED_STATUSES,
+				query.types().isEmpty(),
+				query.types().isEmpty() ? NO_FILTER : query.types()).stream()
 				.filter(row -> row.availableUnits() >= query.rooms())
 				.collect(Collectors.toMap(RoomTypeAvailability::roomTypeId, RoomTypeAvailability::availableUnits));
 		if (available.isEmpty()) {
