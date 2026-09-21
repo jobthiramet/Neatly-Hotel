@@ -114,6 +114,8 @@ async function loadBooking() {
       originalCheckOut.value = loaded.checkOut.date
       checkIn.value = loaded.checkIn.date
       checkOut.value = loaded.checkOut.date
+      if (loaded.status !== 'within-24h')
+        error.value = 'This booking cannot change dates.'
     }
   }
   catch (cause) {

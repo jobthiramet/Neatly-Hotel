@@ -5,24 +5,60 @@ import { cancelBooking, changeBookingDates, getBooking, listBookings, type Booki
 import type { BookingStatus, PriceBreakdownItem, UserBooking } from '@/data/booking'
 import superiorGardenImage from '@/assets/home/room-superior-garden-view.webp'
 
-function hoursBetween(fromMs: number, toMs: number) {
-  return (toMs - fromMs) / 3_600_000
+/** Asia/Bangkok has no DST; matches server HOTEL_ZONE check-in at 14:00. */
+const BANGKOK_OFFSET = '+07:00'
+const HOUR_MS = 3_600_000
+const DAY_MS = 24 * HOUR_MS
+
+export function checkInAtMs(checkIn: string) {
+  return Date.parse(`${checkIn}T14:00:00${BANGKOK_OFFSET}`)
+}
+
+export function refundDeadlineMs(checkIn: string) {
+  return checkInAtMs(checkIn) - DAY_MS
 }
 
 export function uiStatus(booking: BookingResponse, now = Date.now()): BookingStatus {
   if (booking.status === 'CANCELLED')
     return 'cancelled'
-  if (booking.status === 'CHECKED_IN' || booking.status === 'COMPLETED')
+  if (booking.status === 'CHECKED_IN' || booking.status === 'CHECKED_OUT' || booking.status === 'COMPLETED')
     return 'checked-in'
-  const checkInMs = Date.parse(`${booking.checkIn}T14:00:00`)
-  if (hoursBetween(now, checkInMs) <= 24)
+  const checkInMs = checkInAtMs(booking.checkIn)
+  if (now >= checkInMs)
+    return 'checked-in'
+  if (checkInMs - now <= DAY_MS)
     return 'checkin-soon'
-  if (hoursBetween(Date.parse(booking.createdAt), now) <= 24)
+  if (now - Date.parse(booking.createdAt) <= DAY_MS)
     return 'within-24h'
   return 'after-24h'
 }
 
-export function toUserBooking(booking: BookingResponse): UserBooking {
+function unitLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
+export function refundCountdownText(status: BookingStatus, deadlineMs: number | undefined, now: number) {
+  if (status === 'checked-in' || status === 'cancelled' || deadlineMs == null)
+    return null
+  if (status === 'checkin-soon' || now >= deadlineMs)
+    return { text: 'Refund no longer available', urgent: false as const }
+  const remaining = deadlineMs - now
+  const days = Math.floor(remaining / DAY_MS)
+  const hours = Math.floor((remaining % DAY_MS) / HOUR_MS)
+  const minutes = Math.floor((remaining % HOUR_MS) / 60_000)
+  let span: string
+  if (days > 0)
+    span = hours > 0
+      ? `${unitLabel(days, 'day', 'days')} ${unitLabel(hours, 'hour', 'hours')}`
+      : unitLabel(days, 'day', 'days')
+  else if (hours > 0)
+    span = unitLabel(hours, 'hour', 'hours')
+  else
+    span = unitLabel(Math.max(minutes, 1), 'minute', 'minutes')
+  return { text: `Refund available for ${span}`, urgent: remaining < HOUR_MS }
+}
+
+export function toUserBooking(booking: BookingResponse, now = Date.now()): UserBooking {
   return {
     id: booking.id,
     roomName: booking.roomName,
@@ -48,7 +84,8 @@ export function toUserBooking(booking: BookingResponse): UserBooking {
     })),
     totalPrice: booking.grandTotal,
     additionalRequest: booking.additionalRequest || undefined,
-    status: uiStatus(booking),
+    status: uiStatus(booking, now),
+    refundDeadlineMs: refundDeadlineMs(booking.checkIn),
   }
 }
 
@@ -56,8 +93,13 @@ export const useBookingStore = defineStore('booking', () => {
   const records = ref<BookingResponse[]>([])
   const loading = ref(false)
   const error = ref('')
+  const nowMs = ref(Date.now())
 
-  const bookings = computed(() => records.value.map(toUserBooking))
+  const bookings = computed(() => records.value.map(booking => toUserBooking(booking, nowMs.value)))
+
+  function tickClock(at = Date.now()) {
+    nowMs.value = at
+  }
 
   async function loadMine(token: string) {
     loading.value = true
@@ -107,14 +149,16 @@ export const useBookingStore = defineStore('booking', () => {
 
   function getBookingView(id: string): UserBooking | undefined {
     const record = getBookingRecord(id)
-    return record ? toUserBooking(record) : undefined
+    return record ? toUserBooking(record, nowMs.value) : undefined
   }
 
   return {
     records,
     bookings,
+    nowMs,
     loading,
     error,
+    tickClock,
     loadMine,
     loadOne,
     getBooking: getBookingView,

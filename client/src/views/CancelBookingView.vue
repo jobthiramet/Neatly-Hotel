@@ -76,8 +76,11 @@ async function loadBooking() {
   }
   try {
     await bookingStore.loadOne(token, bookingId.value)
-    if (bookingStore.getBooking(bookingId.value)?.status === 'cancelled')
+    const loaded = bookingStore.getBooking(bookingId.value)
+    if (loaded?.status === 'cancelled')
       isSubmitted.value = true
+    else if (loaded?.status === 'checked-in')
+      error.value = 'This booking cannot be cancelled.'
   }
   catch (cause) {
     error.value = apiErrorMessage(cause, 'Could not load this booking.')
@@ -90,6 +93,10 @@ async function loadBooking() {
 async function handleConfirmCancellation() {
   if (!booking.value || isSubmitting.value)
     return
+  if (booking.value.status === 'checked-in') {
+    error.value = 'This booking cannot be cancelled.'
+    return
+  }
   isSubmitting.value = true
   error.value = ''
   const token = await sessionToken()
@@ -221,7 +228,7 @@ watch(isLoaded, (ready) => {
             </Button>
 
             <Button
-              :disabled="isSubmitting"
+              :disabled="isSubmitting || booking.status === 'checked-in'"
               @click="handleConfirmCancellation"
             >
               {{ isRefund ? 'Cancel and Refund this Booking' : 'Cancel this Booking' }}
@@ -232,7 +239,7 @@ watch(isLoaded, (ready) => {
           <div class="mt-6 flex flex-col gap-4 px-4 lg:hidden">
             <Button
               class="w-full"
-              :disabled="isSubmitting"
+              :disabled="isSubmitting || booking.status === 'checked-in'"
               @click="handleConfirmCancellation"
             >
               {{ isRefund ? 'Cancel and Refund this Booking' : 'Cancel this Booking' }}

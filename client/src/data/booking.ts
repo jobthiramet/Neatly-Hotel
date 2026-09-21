@@ -8,8 +8,8 @@ export type BookingStatus =
   | 'within-24h' // within 24 hours of booking: able to change date, able to cancel and refund
   | 'after-24h' // after 24 hours of booking: cannot change date, can cancel and refund
   | 'checkin-soon' // within 24 hours of check-in date: cancel booking will not able to refund
-  | 'checked-in' // after user already checked in: all CTA disappear, only view detail
-  | 'cancelled' // cancelled booking: shows cancellation date, no CTA
+  | 'checked-in' // after check-in (14:00 Bangkok or API CHECKED_IN): all CTAs disappear, only view detail
+  | 'cancelled' // cancelled booking: shows cancellation date, Room Detail stays
 
 export interface PriceBreakdownItem {
   label: string
@@ -123,6 +123,8 @@ export interface UserBooking {
   totalPrice: number
   additionalRequest?: string
   status: BookingStatus
+  /** Instant when the refund window closes (check-in 14:00 Bangkok minus 24 hours). */
+  refundDeadlineMs?: number
   expandedInitially?: boolean
 }
 
