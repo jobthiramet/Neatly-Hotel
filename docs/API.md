@@ -578,12 +578,13 @@ Create a new Stripe Checkout Session for an unpaid card booking (`PENDING_PAYMEN
 
 #### `POST /api/bookings/{id}/cancel`
 
-Cancel a `CONFIRMED` booking owned by the signed-in user. `cancelledAt` is set to now. Inventory is released by the existing `booking_rooms` trigger.
+Cancel a `CONFIRMED` booking owned by the signed-in user, until check-in at 14:00 `Asia/Bangkok`. `cancelledAt` is set to now. Inventory is released by the existing `booking_rooms` trigger.
 
 Refunds are decided on the server (the client does not send a refund flag):
 
 - Full refund when check-in is more than 24 hours away, counted from 14:00 `Asia/Bangkok`
 - No refund when check-in is within 24 hours
+- After check-in (14:00 `Asia/Bangkok` has passed) the booking cannot be cancelled
 - **Stripe** with a `SUCCEEDED` charge: create a Stripe refund of `grandTotal`, then insert a `payments` row (`kind` `REFUND`, `stripe_refund_id`)
 - **Cash** or unpaid: cancel only; no money is moved
 - Stripe refund failure returns `502` and the booking stays `CONFIRMED`
@@ -591,11 +592,11 @@ Refunds are decided on the server (the client does not send a refund flag):
 - Auth: Clerk session token
 - Body: none
 - Response `200`: `ApiResponse<BookingResponse>` with `message: "Booking cancelled"`
-- Errors: `400` status is not `CONFIRMED`; `401`; `404`; `502` Stripe refund failed; `503` `STRIPE_SECRET_KEY` missing when a card refund is required
+- Errors: `400` status is not `CONFIRMED`, or check-in time has passed; `401`; `404`; `502` Stripe refund failed; `503` `STRIPE_SECRET_KEY` missing when a card refund is required
 
 #### `PATCH /api/bookings/{id}/dates`
 
-Change check-in and check-out of a `CONFIRMED` booking within 24 hours of `createdAt`. Price is not recalculated. The new stay must keep exactly the original number of nights, so only the dates move. Availability reuses the same occupancy check as checkout, excluding this booking.
+Change check-in and check-out of a `CONFIRMED` booking within 24 hours of `createdAt`, while check-in is still more than 24 hours away (14:00 `Asia/Bangkok`). Price is not recalculated. The new stay must keep exactly the original number of nights, so only the dates move. Availability reuses the same occupancy check as checkout, excluding this booking.
 
 `ChangeBookingDatesRequest`:
 
@@ -607,7 +608,7 @@ Change check-in and check-out of a `CONFIRMED` booking within 24 hours of `creat
 - Auth: Clerk session token
 - Body: `ChangeBookingDatesRequest`
 - Response `200`: `ApiResponse<BookingResponse>` with `message: "Booking dates updated"`
-- Errors: `400` outside the 24-hour window, not `CONFIRMED`, or a different number of nights than the original; `401`; `404`; `409` no remaining units for the new dates
+- Errors: `400` outside the 24-hour booking window, check-in within 24 hours or already started, not `CONFIRMED`, or a different number of nights than the original; `401`; `404`; `409` no remaining units for the new dates
 
 #### `POST /api/stripe/webhooks`
 
@@ -628,6 +629,8 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-21
 
+- `POST /api/bookings/{id}/cancel` returns `400` once check-in at 14:00 `Asia/Bangkok` has passed (booking stays `CONFIRMED`).
+- `PATCH /api/bookings/{id}/dates` is allowed only within 24 hours of `createdAt` **and** while check-in is still more than 24 hours away.
 - `GET /api/rooms/available` takes an optional repeatable `roomTypeIds` param (max 20) to search only those room types. Omitted or empty is unchanged; unknown ids match nothing.
 
 ### 2026-09-18

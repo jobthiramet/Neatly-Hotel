@@ -16,7 +16,9 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -120,7 +122,10 @@ class BookingServiceImplTest {
 
 	@Test
 	void cancelDoesNotRefundWhenCheckInIsWithin24Hours() {
-		Booking booking = confirmedBooking(BookingPaymentMethod.STRIPE, Instant.now().minus(Duration.ofHours(2)), bangkokToday());
+		Booking booking = confirmedBooking(
+				BookingPaymentMethod.STRIPE,
+				Instant.now().minus(Duration.ofHours(2)),
+				bangkokNextCheckInWithin24Hours());
 		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
 
 		var response = service.cancel("user_abc", booking.getId());
@@ -165,6 +170,21 @@ class BookingServiceImplTest {
 	}
 
 	@Test
+	void cancelRejectsWhenStayHasStarted() {
+		Booking booking = confirmedBooking(
+				BookingPaymentMethod.CASH,
+				Instant.now().minus(Duration.ofHours(2)),
+				bangkokToday().minusDays(1));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.cancel("user_abc", booking.getId()));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
+		assertNull(booking.getCancelledAt());
+		verify(stripe, never()).refund(any(), any());
+	}
+
+	@Test
 	void changeDatesUpdatesStayWithin24HoursOfBooking() {
 		Booking booking = confirmedBooking(BookingPaymentMethod.CASH, Instant.now().minus(Duration.ofHours(1)), bangkokToday().plusDays(4));
 		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
@@ -190,6 +210,38 @@ class BookingServiceImplTest {
 						"user_abc",
 						booking.getId(),
 						new ChangeBookingDatesRequest(bangkokToday().plusDays(6), bangkokToday().plusDays(7))));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		verify(bookingRepository, never()).occupiedUnits(any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void changeDatesRejectsWhenCheckInIsWithin24Hours() {
+		Booking booking = confirmedBooking(
+				BookingPaymentMethod.CASH,
+				Instant.now().minus(Duration.ofHours(1)),
+				bangkokNextCheckInWithin24Hours());
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		LocalDate checkIn = bangkokToday().plusDays(6);
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> service.changeDates("user_abc", booking.getId(), new ChangeBookingDatesRequest(checkIn, checkIn.plusDays(1))));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		verify(bookingRepository, never()).occupiedUnits(any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void changeDatesRejectsWhenStayHasStarted() {
+		Booking booking = confirmedBooking(
+				BookingPaymentMethod.CASH,
+				Instant.now().minus(Duration.ofHours(1)),
+				bangkokToday().minusDays(1));
+		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
+
+		LocalDate checkIn = bangkokToday().plusDays(6);
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> service.changeDates("user_abc", booking.getId(), new ChangeBookingDatesRequest(checkIn, checkIn.plusDays(1))));
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		verify(bookingRepository, never()).occupiedUnits(any(), any(), any(), any(), any(), any());
 	}
@@ -361,5 +413,14 @@ class BookingServiceImplTest {
 
 	private static LocalDate bangkokToday() {
 		return LocalDate.now(ZoneId.of("Asia/Bangkok"));
+	}
+
+	/** Next 14:00 Asia/Bangkok that is still in the future and within 24 hours. */
+	private static LocalDate bangkokNextCheckInWithin24Hours() {
+		ZoneId zone = ZoneId.of("Asia/Bangkok");
+		ZonedDateTime now = ZonedDateTime.now(zone);
+		ZonedDateTime todayCheckIn = now.toLocalDate().atTime(LocalTime.of(14, 0)).atZone(zone);
+		ZonedDateTime checkIn = todayCheckIn.isAfter(now) ? todayCheckIn : todayCheckIn.plusDays(1);
+		return checkIn.toLocalDate();
 	}
 }
