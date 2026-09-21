@@ -104,7 +104,6 @@ class BookingServiceImplTest {
 	}
 
 	@Test
-<<<<<<< HEAD
 	void cancelRefundsPaidStripeWhenCheckInIsMoreThan24HoursAway() {
 		Booking booking = confirmedBooking(BookingPaymentMethod.STRIPE, Instant.now().minus(Duration.ofHours(2)), bangkokToday().plusDays(4));
 		when(bookingRepository.findByIdAndUserId(booking.getId(), "user_abc")).thenReturn(Optional.of(booking));
@@ -235,7 +234,9 @@ class BookingServiceImplTest {
 				ApiException.class,
 				() -> service.changeDates("user_abc", booking.getId(), new ChangeBookingDatesRequest(checkIn, checkIn.plusDays(1))));
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
-=======
+	}
+
+	@Test
 	void multiRoomBookingNeedsThatManyFreeUnitsAndFitsGuestsAcrossRooms() {
 		RoomType roomType = roomType(new BigDecimal("2500.00"), null);
 		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
@@ -256,7 +257,6 @@ class BookingServiceImplTest {
 		ApiException tooMany = assertThrows(ApiException.class,
 				() -> service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, null, List.of(), 2, 5)));
 		assertEquals(HttpStatus.BAD_REQUEST, tooMany.getStatus());
->>>>>>> 306880a (fix(server): check multi-room bookings against bookable units)
 	}
 
 	private CreateBookingRequest request(
