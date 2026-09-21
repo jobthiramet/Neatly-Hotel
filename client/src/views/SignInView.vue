@@ -2,7 +2,7 @@
 import { useSignIn } from '@clerk/vue'
 import { isClerkAPIResponseError } from '@clerk/vue/errors'
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,7 @@ import IconGoogle from '@/components/icons/IconGoogle.vue'
 import { navLinks } from '@/data/home'
 import backgroundImage from '@/assets/auth/register-background.jpg'
 
+const route = useRoute()
 const router = useRouter()
 const { isLoaded, signIn, setActive } = useSignIn()
 const identifier = ref('')
@@ -27,6 +28,11 @@ const touched = reactive({ identifier: false, password: false, secondFactorCode:
 const errors = reactive({ identifier: '', password: '', secondFactorCode: '', resetCode: '', newPassword: '', confirmPassword: '', form: '' })
 
 type FieldName = keyof typeof touched
+
+function redirectTarget() {
+  const target = route.query.redirect_url
+  return typeof target === 'string' && target.startsWith('/') && !target.startsWith('//') ? target : '/'
+}
 
 function validateField(field: FieldName) {
   if (!touched[field]) return
@@ -96,7 +102,7 @@ async function login() {
     const result = await signIn.value.attemptFirstFactor({ strategy: 'password', password: password.value })
     if (result.status === 'complete' && setActive.value) {
       await setActive.value({ session: result.createdSessionId })
-      await router.push('/')
+      await router.push(redirectTarget())
     }
     else if (result.status === 'needs_second_factor' || result.status === 'needs_client_trust') {
       const factor = result.supportedSecondFactors?.find(({ strategy }) => strategy === 'email_code' || strategy === 'phone_code' || strategy === 'totp')
@@ -127,7 +133,7 @@ async function verifySecondFactor() {
     const result = await signIn.value.attemptSecondFactor({ strategy: secondFactorStrategy.value, code: secondFactorCode.value })
     if (result.status === 'complete' && setActive.value) {
       await setActive.value({ session: result.createdSessionId })
-      await router.push('/')
+      await router.push(redirectTarget())
     }
     else errors.form = 'Verification could not be completed. Please try again.'
   }
@@ -147,7 +153,7 @@ async function loginWithSocial(strategy: 'oauth_google' | 'oauth_facebook') {
     await signIn.value.authenticateWithRedirect({
       strategy,
       redirectUrl: '/sso-callback',
-      redirectUrlComplete: '/',
+      redirectUrlComplete: redirectTarget(),
     })
   }
   catch (caught) {
@@ -199,7 +205,7 @@ async function resetPassword() {
     const result = await signIn.value.resetPassword({ password: newPassword.value })
     if (result.status === 'complete' && setActive.value) {
       await setActive.value({ session: result.createdSessionId })
-      await router.push('/')
+      await router.push(redirectTarget())
     }
     else errors.form = 'Password reset needs an additional verification step.'
   }
