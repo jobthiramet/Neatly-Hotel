@@ -75,7 +75,7 @@ public class BookingController {
 	}
 
 	@PostMapping("/{id}/cancel")
-	@Operation(summary = "Cancel a confirmed booking", description = "Refunds a paid card booking when check-in is more than 24 hours away (14:00 Asia/Bangkok). Cash bookings are cancelled without moving money.")
+	@Operation(summary = "Cancel a confirmed booking", description = "Allowed until check-in (14:00 Asia/Bangkok). Refunds a paid card booking when check-in is more than 24 hours away. Cash bookings are cancelled without moving money.")
 	public ApiResponse<BookingResponse> cancel(
 			@AuthenticationPrincipal Jwt jwt,
 			@PathVariable UUID id) {
@@ -83,7 +83,7 @@ public class BookingController {
 	}
 
 	@PatchMapping("/{id}/dates")
-	@Operation(summary = "Change check-in and check-out dates", description = "Allowed within 24 hours of booking. The new stay must keep the original number of nights. Price is unchanged.")
+	@Operation(summary = "Change check-in and check-out dates", description = "Allowed within 24 hours of booking while check-in is still more than 24 hours away (14:00 Asia/Bangkok). The new stay must keep the original number of nights. Price is unchanged.")
 	public ApiResponse<BookingResponse> changeDates(
 			@AuthenticationPrincipal Jwt jwt,
 			@PathVariable UUID id,

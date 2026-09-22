@@ -3,7 +3,7 @@
 import type { DateValue } from '@internationalized/date'
 import { DateFormatter, getLocalTimeZone } from '@internationalized/date'
 import { useAuth } from '@clerk/vue'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { IconCaretDown, IconChevronRight } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
@@ -20,12 +20,23 @@ import {
 } from '@/components/ui/dialog'
 import type { UserBooking } from '@/data/booking'
 import { defaultRoomId, roomDetails } from '@/data/rooms'
-import { useBookingStore } from '@/stores/booking'
+import { useBookingStore, refundCountdownText } from '@/stores/booking'
 
 const router = useRouter()
 const route = useRoute()
 const { getToken, isLoaded } = useAuth()
 const bookingStore = useBookingStore()
+const CLOCK_MS = 60_000
+let clockTimer = 0
+
+onMounted(() => {
+  bookingStore.tickClock()
+  clockTimer = window.setInterval(() => bookingStore.tickClock(), CLOCK_MS)
+})
+
+onUnmounted(() => {
+  window.clearInterval(clockTimer)
+})
 
 const formatter = new DateFormatter('en-GB', {
   weekday: 'short',
@@ -96,16 +107,37 @@ const paginatedBookings = computed(() => {
   return bookingStore.bookings.slice(start, start + itemsPerPage.value)
 })
 
+const refundLines = computed(() => {
+  const now = bookingStore.nowMs
+  return Object.fromEntries(
+    paginatedBookings.value.map(booking => [
+      booking.id,
+      refundCountdownText(booking.status, booking.refundDeadlineMs, now),
+    ]),
+  )
+})
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+async function goToPage(page: number) {
+  if (page === currentPage.value || page < 1 || page > totalPages.value)
+    return
+  currentPage.value = page
+  await nextTick()
+  document.getElementById('booking-history-title')?.scrollIntoView({
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    block: 'start',
+  })
+}
+
 function prevPage() {
-  if (currentPage.value > 1) {
-    currentPage.value--
-  }
+  void goToPage(currentPage.value - 1)
 }
 
 function nextPage() {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++
-  }
+  void goToPage(currentPage.value + 1)
 }
 
 async function focusBooking() {
@@ -147,7 +179,7 @@ watch(isLoaded, (ready) => {
       >
         <h1
           id="booking-history-title"
-          class="font-serif text-h3 text-green-800 lg:text-h2 lg:text-green-700"
+          class="scroll-mt-24 font-serif text-h3 text-green-800 lg:text-h2 lg:text-green-700"
         >
           Booking History
         </h1>
@@ -200,8 +232,17 @@ watch(isLoaded, (ready) => {
                   </h2>
                   <div class="text-left text-body1 text-gray-600 lg:text-right">
                     <p>Booking date: {{ formatDate(booking.bookedAt) }}</p>
-                    <p v-if="booking.cancellationDate">
+                    <p
+                      v-if="booking.cancellationDate"
+                      class="font-semibold text-red"
+                    >
                       Cancellation date: {{ formatDate(booking.cancellationDate) }}
+                    </p>
+                    <p
+                      v-else-if="refundLines[booking.id]"
+                      :class="refundLines[booking.id]?.urgent ? 'text-orange-500' : undefined"
+                    >
+                      {{ refundLines[booking.id]?.text }}
                     </p>
                   </div>
                 </header>
@@ -300,7 +341,7 @@ watch(isLoaded, (ready) => {
 
                   <div class="flex items-center gap-6">
                     <Button
-                      v-if="booking.status !== 'cancelled'"
+                      v-if="booking.status !== 'checked-in'"
                       variant="ghost"
                       as-child
                     >
@@ -321,7 +362,7 @@ watch(isLoaded, (ready) => {
                 <!-- Mobile Action Bar -->
                 <div class="flex flex-col gap-4 pt-2 lg:hidden">
                   <div
-                    v-if="booking.status !== 'cancelled'"
+                    v-if="booking.status !== 'checked-in'"
                     class="flex items-center justify-between"
                   >
                     <Button variant="ghost" as-child>
@@ -382,7 +423,7 @@ watch(isLoaded, (ready) => {
               ? 'border border-gray-300 bg-white font-semibold text-green-700'
               : 'cursor-pointer text-gray-600 is-hover:text-black'"
             :aria-current="page === currentPage ? 'page' : undefined"
-            @click="currentPage = page"
+            @click="goToPage(page)"
           >
             {{ page }}
           </button>

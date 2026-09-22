@@ -203,7 +203,7 @@ public class BookingServiceImpl implements BookingService {
 	@Override
 	public BookingResponse cancel(String clerkUserId, UUID bookingId) {
 		Booking booking = requireMine(clerkUserId, bookingId);
-		if (booking.getStatus() != BookingStatus.CONFIRMED) {
+		if (!canCancel(booking)) {
 			throw new ApiException("This booking cannot be cancelled", HttpStatus.BAD_REQUEST);
 		}
 		if (isRefundable(booking)) {
@@ -394,15 +394,27 @@ public class BookingServiceImpl implements BookingService {
 		booking.getPayments().add(refund);
 	}
 
+	private boolean canCancel(Booking booking) {
+		return booking.getStatus() == BookingStatus.CONFIRMED && !stayHasStarted(booking);
+	}
+
 	private boolean canChangeDates(Booking booking) {
 		return booking.getStatus() == BookingStatus.CONFIRMED
 				&& booking.getCreatedAt() != null
-				&& Instant.now().isBefore(booking.getCreatedAt().plus(Duration.ofHours(24)));
+				&& Instant.now().isBefore(booking.getCreatedAt().plus(Duration.ofHours(24)))
+				&& Instant.now().isBefore(checkInAt(booking).minus(Duration.ofHours(24)));
 	}
 
 	private boolean isRefundable(Booking booking) {
-		Instant checkInAt = booking.getCheckIn().atTime(CHECK_IN_TIME).atZone(HOTEL_ZONE).toInstant();
-		return Instant.now().isBefore(checkInAt.minus(Duration.ofHours(24)));
+		return Instant.now().isBefore(checkInAt(booking).minus(Duration.ofHours(24)));
+	}
+
+	private boolean stayHasStarted(Booking booking) {
+		return !Instant.now().isBefore(checkInAt(booking));
+	}
+
+	private Instant checkInAt(Booking booking) {
+		return booking.getCheckIn().atTime(CHECK_IN_TIME).atZone(HOTEL_ZONE).toInstant();
 	}
 
 	private static int nights(LocalDate checkIn, LocalDate checkOut) {
