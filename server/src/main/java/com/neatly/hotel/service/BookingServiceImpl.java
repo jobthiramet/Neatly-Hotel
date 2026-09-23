@@ -69,6 +69,7 @@ public class BookingServiceImpl implements BookingService {
 	private final PaymentRepository paymentRepository;
 	private final StripeWebhookEventRepository stripeEventRepository;
 	private final StripeCheckoutGateway stripe;
+	private final MailService mail;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 	private final String clientOrigin;
 
@@ -79,6 +80,7 @@ public class BookingServiceImpl implements BookingService {
 			PaymentRepository paymentRepository,
 			StripeWebhookEventRepository stripeEventRepository,
 			StripeCheckoutGateway stripe,
+			MailService mail,
 			@Value("${app.client-origin:http://localhost:5173}") String clientOrigin) {
 		this.bookingRepository = bookingRepository;
 		this.roomTypeRepository = roomTypeRepository;
@@ -86,6 +88,7 @@ public class BookingServiceImpl implements BookingService {
 		this.paymentRepository = paymentRepository;
 		this.stripeEventRepository = stripeEventRepository;
 		this.stripe = stripe;
+		this.mail = mail;
 		this.clientOrigin = clientOrigin.replaceAll("/+$", "");
 	}
 
@@ -206,12 +209,15 @@ public class BookingServiceImpl implements BookingService {
 		if (!canCancel(booking)) {
 			throw new ApiException("This booking cannot be cancelled", HttpStatus.BAD_REQUEST);
 		}
-		if (isRefundable(booking)) {
+		boolean refunded = isRefundable(booking);
+		if (refunded) {
 			refundPaidStripeCharge(booking);
 		}
 		booking.setStatus(BookingStatus.CANCELLED);
 		booking.setCancelledAt(Instant.now());
-		return toResponse(bookingRepository.save(booking), null);
+		Booking saved = bookingRepository.save(booking);
+		mail.sendCancellation(saved, refunded);
+		return toResponse(saved, null);
 	}
 
 	@Override
