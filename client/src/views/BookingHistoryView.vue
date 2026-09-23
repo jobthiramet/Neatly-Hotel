@@ -272,13 +272,13 @@ watch(isLoaded, (ready) => {
                 <div class="overflow-hidden rounded-sm bg-gray-100">
                   <button
                     type="button"
-                    class="flex w-full cursor-pointer items-center justify-between p-4 text-left outline-none transition-colors is-hover:bg-gray-200 is-focus:ring-2 is-focus:ring-ring"
+                    class="flex w-full cursor-pointer items-center justify-between py-4 pr-3 pl-4 text-left outline-none transition-colors is-hover:bg-gray-200 is-focus:ring-2 is-focus:ring-ring"
                     :aria-expanded="!!expandedBookingIds[booking.id]"
                     @click="toggleAccordion(booking.id)"
                   >
                     <span class="text-body1 font-semibold text-gray-800">Booking Detail</span>
                     <IconCaretDown
-                      class="size-5 text-gray-700 transition-transform duration-200"
+                      class="size-5 shrink-0 text-gray-700 transition-transform duration-200"
                       :class="{ 'rotate-180': expandedBookingIds[booking.id] }"
                     />
                   </button>
@@ -332,7 +332,7 @@ watch(isLoaded, (ready) => {
                     <button
                       v-if="booking.status !== 'checked-in' && booking.status !== 'cancelled'"
                       type="button"
-                      class="rounded-sm text-body1 font-semibold text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring"
+                      class="cursor-pointer rounded-sm text-body1 font-semibold text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring"
                       @click="openCancelDialog(booking)"
                     >
                       Cancel Booking
@@ -385,7 +385,7 @@ watch(isLoaded, (ready) => {
                   >
                     <button
                       type="button"
-                      class="rounded-sm text-body1 font-semibold text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring"
+                      class="cursor-pointer rounded-sm text-body1 font-semibold text-orange-500 outline-none is-hover:text-orange-400 is-focus:ring-2 is-focus:ring-ring"
                       @click="openCancelDialog(booking)"
                     >
                       Cancel Booking
