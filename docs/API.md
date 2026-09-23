@@ -588,6 +588,7 @@ Refunds are decided on the server (the client does not send a refund flag):
 - **Stripe** with a `SUCCEEDED` charge: create a Stripe refund of `grandTotal`, then insert a `payments` row (`kind` `REFUND`, `stripe_refund_id`)
 - **Cash** or unpaid: cancel only; no money is moved
 - Stripe refund failure returns `502` and the booking stays `CONFIRMED`
+- After a successful cancel, the API sends a confirmation email to `guestEmail` through Brevo (refund amount when check-in is more than 24 hours away; otherwise a no-refund notice). A missing `BREVO_API_KEY` or `MAIL_FROM`, or a mail-provider failure, is logged and does not change the `200` response
 
 - Auth: Clerk session token
 - Body: none
@@ -626,6 +627,10 @@ Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
+
+### 2026-09-23
+
+- `POST /api/bookings/{id}/cancel` sends a best-effort cancellation email to `guestEmail` through Brevo after the booking is saved. The message includes a refund of `grandTotal` when check-in is more than 24 hours away, and a no-refund notice otherwise. Mail is skipped when `BREVO_API_KEY` or `MAIL_FROM` is empty, and a Brevo failure does not roll back the cancellation.
 
 ### 2026-09-21
 

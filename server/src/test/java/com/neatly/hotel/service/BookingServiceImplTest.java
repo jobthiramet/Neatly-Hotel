@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -55,6 +56,7 @@ class BookingServiceImplTest {
 	private final PaymentRepository paymentRepository = mock(PaymentRepository.class);
 	private final StripeWebhookEventRepository stripeEventRepository = mock(StripeWebhookEventRepository.class);
 	private final StripeCheckoutGateway stripe = mock(StripeCheckoutGateway.class);
+	private final MailService mail = mock(MailService.class);
 	private BookingServiceImpl service;
 
 	@BeforeEach
@@ -66,6 +68,7 @@ class BookingServiceImplTest {
 				paymentRepository,
 				stripeEventRepository,
 				stripe,
+				mail,
 				"http://localhost:5173");
 		when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -116,6 +119,7 @@ class BookingServiceImplTest {
 		assertEquals(BookingStatus.CANCELLED, response.status());
 		assertNotNull(response.cancelledAt());
 		verify(stripe).refund("pi_abc", new BigDecimal("2500.00"));
+		verify(mail).sendCancellation(booking, true);
 		assertEquals(PaymentKind.REFUND, booking.getPayments().get(1).getKind());
 		assertEquals("re_abc", booking.getPayments().get(1).getStripeRefundId());
 	}
@@ -132,6 +136,7 @@ class BookingServiceImplTest {
 
 		assertEquals(BookingStatus.CANCELLED, response.status());
 		verify(stripe, never()).refund(any(), any());
+		verify(mail).sendCancellation(booking, false);
 		assertEquals(1, booking.getPayments().size());
 	}
 
@@ -144,6 +149,7 @@ class BookingServiceImplTest {
 
 		assertEquals(BookingStatus.CANCELLED, response.status());
 		verify(stripe, never()).refund(any(), any());
+		verify(mail).sendCancellation(booking, true);
 	}
 
 	@Test
@@ -157,6 +163,7 @@ class BookingServiceImplTest {
 		assertEquals(HttpStatus.BAD_GATEWAY, exception.getStatus());
 		assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
 		assertNull(booking.getCancelledAt());
+		verify(mail, never()).sendCancellation(any(), anyBoolean());
 	}
 
 	@Test
@@ -167,6 +174,7 @@ class BookingServiceImplTest {
 
 		ApiException exception = assertThrows(ApiException.class, () -> service.cancel("user_abc", booking.getId()));
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		verify(mail, never()).sendCancellation(any(), anyBoolean());
 	}
 
 	@Test
@@ -182,6 +190,7 @@ class BookingServiceImplTest {
 		assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
 		assertNull(booking.getCancelledAt());
 		verify(stripe, never()).refund(any(), any());
+		verify(mail, never()).sendCancellation(any(), anyBoolean());
 	}
 
 	@Test
