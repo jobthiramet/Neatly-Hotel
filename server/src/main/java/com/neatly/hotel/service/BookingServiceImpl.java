@@ -209,10 +209,7 @@ public class BookingServiceImpl implements BookingService {
 		if (!canCancel(booking)) {
 			throw new ApiException("This booking cannot be cancelled", HttpStatus.BAD_REQUEST);
 		}
-		boolean refunded = isRefundable(booking);
-		if (refunded) {
-			refundPaidStripeCharge(booking);
-		}
+		boolean refunded = isRefundable(booking) && refundPaidStripeCharge(booking);
 		booking.setStatus(BookingStatus.CANCELLED);
 		booking.setCancelledAt(Instant.now());
 		Booking saved = bookingRepository.save(booking);
@@ -374,12 +371,13 @@ public class BookingServiceImpl implements BookingService {
 		booking.setCurrency("THB");
 	}
 
-	private void refundPaidStripeCharge(Booking booking) {
+	/** Refunds a succeeded Stripe charge. Cash and unpaid bookings return false without calling Stripe. */
+	private boolean refundPaidStripeCharge(Booking booking) {
 		Payment charge = latestStripeCharge(booking)
 				.filter(payment -> payment.getStatus() == PaymentStatus.SUCCEEDED)
 				.orElse(null);
 		if (charge == null) {
-			return;
+			return false;
 		}
 		String paymentIntentId = charge.getStripePaymentIntentId();
 		if (paymentIntentId == null || paymentIntentId.isBlank()) {
@@ -394,10 +392,10 @@ public class BookingServiceImpl implements BookingService {
 		refund.setStatus(PaymentStatus.SUCCEEDED);
 		refund.setAmount(booking.getGrandTotal());
 		refund.setCurrency(booking.getCurrency());
-		refund.setStripePaymentIntentId(paymentIntentId);
 		refund.setStripeRefundId(refundId);
 		refund.setPaidAt(Instant.now());
 		booking.getPayments().add(refund);
+		return true;
 	}
 
 	private boolean canCancel(Booking booking) {

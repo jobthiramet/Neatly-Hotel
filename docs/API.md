@@ -582,13 +582,12 @@ Cancel a `CONFIRMED` booking owned by the signed-in user, until check-in at 14:0
 
 Refunds are decided on the server (the client does not send a refund flag):
 
-- Full refund when check-in is more than 24 hours away, counted from 14:00 `Asia/Bangkok`
-- No refund when check-in is within 24 hours
+- **Stripe** with a `SUCCEEDED` charge and check-in more than 24 hours away (14:00 `Asia/Bangkok`): create a Stripe refund of `grandTotal` back to that card, then insert a `payments` row (`kind` `REFUND`, `stripe_refund_id`)
+- **Stripe** within 24 hours of check-in: cancel only; no Stripe refund
+- **Cash**: cancel only; no money is moved. Cash stays unpaid until the guest pays at the hotel
 - After check-in (14:00 `Asia/Bangkok` has passed) the booking cannot be cancelled
-- **Stripe** with a `SUCCEEDED` charge: create a Stripe refund of `grandTotal`, then insert a `payments` row (`kind` `REFUND`, `stripe_refund_id`)
-- **Cash** or unpaid: cancel only; no money is moved
 - Stripe refund failure returns `502` and the booking stays `CONFIRMED`
-- After a successful cancel, the API sends a confirmation email to `guestEmail` through Brevo (refund amount when check-in is more than 24 hours away; otherwise a no-refund notice). A missing `BREVO_API_KEY` or `MAIL_FROM`, or a mail-provider failure, is logged and does not change the `200` response
+- After a successful cancel, the API sends a confirmation email to `guestEmail` through Brevo. The message names the refund amount only when a Stripe refund was created. A card cancellation inside the 24-hour window says the stay is not eligible for a refund. A cash cancellation says no payment was taken. A missing `BREVO_API_KEY` or `MAIL_FROM`, or a mail-provider failure, is logged and does not change the `200` response
 
 - Auth: Clerk session token
 - Body: none
@@ -630,7 +629,8 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-23
 
-- `POST /api/bookings/{id}/cancel` sends a best-effort cancellation email to `guestEmail` through Brevo after the booking is saved. The message includes a refund of `grandTotal` when check-in is more than 24 hours away, and a no-refund notice otherwise. Mail is skipped when `BREVO_API_KEY` or `MAIL_FROM` is empty, and a Brevo failure does not roll back the cancellation.
+- `POST /api/bookings/{id}/cancel` sends a best-effort cancellation email to `guestEmail` through Brevo after the booking is saved. The refund amount is included only when a Stripe refund was created. Cash cancellations say no payment was taken. Mail is skipped when `BREVO_API_KEY` or `MAIL_FROM` is empty, and a Brevo failure does not roll back the cancellation.
+- Card refunds stay on the original Stripe charge. Cash bookings are cancelled without a refund.
 
 ### 2026-09-21
 

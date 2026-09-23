@@ -24,9 +24,11 @@ const bookingId = computed(() => String(route.params.bookingId || ''))
 const booking = computed(() => bookingStore.getBooking(bookingId.value))
 
 const isRefund = computed(() => {
+  if (booking.value?.paymentMethod !== 'STRIPE')
+    return false
   if (props.refund !== undefined)
     return props.refund
-  return booking.value?.status !== 'checkin-soon'
+  return booking.value.status !== 'checkin-soon'
 })
 
 const loading = ref(true)
