@@ -77,6 +77,7 @@ export function toUserBooking(booking: BookingResponse, now = Date.now()): UserB
     guestsText: booking.guests === 1 ? '1 Guest' : `${booking.guests} Guests`,
     nightsText: booking.nights === 1 ? '1 Night' : `${booking.nights} Nights`,
     paymentMethodText: booking.paymentMethodText,
+    paymentMethod: booking.paymentMethod,
     breakdown: booking.items.map((item): PriceBreakdownItem => ({
       label: item.label,
       amount: item.amount,

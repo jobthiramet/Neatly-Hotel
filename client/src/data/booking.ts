@@ -119,6 +119,8 @@ export interface UserBooking {
   guestsText: string
   nightsText: string
   paymentMethodText: string
+  /** Card bookings can be refunded to the original card. Cash is cancel-only. */
+  paymentMethod?: 'STRIPE' | 'CASH'
   breakdown: PriceBreakdownItem[]
   totalPrice: number
   additionalRequest?: string

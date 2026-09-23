@@ -122,6 +122,7 @@ class BookingServiceImplTest {
 		verify(mail).sendCancellation(booking, true);
 		assertEquals(PaymentKind.REFUND, booking.getPayments().get(1).getKind());
 		assertEquals("re_abc", booking.getPayments().get(1).getStripeRefundId());
+		assertNull(booking.getPayments().get(1).getStripePaymentIntentId());
 	}
 
 	@Test
@@ -149,7 +150,7 @@ class BookingServiceImplTest {
 
 		assertEquals(BookingStatus.CANCELLED, response.status());
 		verify(stripe, never()).refund(any(), any());
-		verify(mail).sendCancellation(booking, true);
+		verify(mail).sendCancellation(booking, false);
 	}
 
 	@Test

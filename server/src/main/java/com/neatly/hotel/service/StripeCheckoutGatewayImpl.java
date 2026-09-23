@@ -24,6 +24,7 @@ import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import com.stripe.param.RefundCreateParams;
+import com.stripe.param.RefundListParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import com.stripe.param.checkout.SessionRetrieveParams;
 
@@ -120,9 +121,35 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 					.build());
 			return refund.getId();
 		} catch (StripeException ex) {
+			if (alreadyRefunded(ex)) {
+				return existingRefundId(paymentIntentId);
+			}
 			log.warn("Stripe refund failed: {}", ex.getMessage());
 			throw new ApiException("Could not refund this payment", HttpStatus.BAD_GATEWAY);
 		}
+	}
+
+	private String existingRefundId(String paymentIntentId) {
+		try {
+			var refunds = client().v1().refunds().list(RefundListParams.builder()
+					.setPaymentIntent(paymentIntentId)
+					.setLimit(1L)
+					.build());
+			if (refunds.getData() != null && !refunds.getData().isEmpty()) {
+				return refunds.getData().get(0).getId();
+			}
+		} catch (StripeException ex) {
+			log.warn("Stripe refund lookup failed: {}", ex.getMessage());
+		}
+		throw new ApiException("Could not refund this payment", HttpStatus.BAD_GATEWAY);
+	}
+
+	private static boolean alreadyRefunded(StripeException ex) {
+		if ("charge_already_refunded".equals(ex.getCode())) {
+			return true;
+		}
+		String message = ex.getMessage();
+		return message != null && message.toLowerCase().contains("already been refunded");
 	}
 
 	@Override

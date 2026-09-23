@@ -82,18 +82,20 @@ function openCancelDialog(booking: UserBooking) {
   cancelDialogOpen.value = true
 }
 
+function requestsCardRefund(booking: { paymentMethod?: string, status?: string } | null | undefined) {
+  return booking?.paymentMethod === 'STRIPE' && booking.status !== 'checkin-soon'
+}
+
 function proceedToCancel() {
   if (!selectedBooking.value) return
   const id = selectedBooking.value.id
-  const isNoRefund = selectedBooking.value.status === 'checkin-soon'
+  const refund = requestsCardRefund(selectedBooking.value)
   cancelDialogOpen.value = false
 
-  if (isNoRefund) {
-    router.push({ name: 'booking-cancel', params: { bookingId: id } })
-  }
-  else {
-    router.push({ name: 'booking-refund', params: { bookingId: id } })
-  }
+  router.push({
+    name: refund ? 'booking-refund' : 'booking-cancel',
+    params: { bookingId: id },
+  })
 }
 
 // Pagination state
@@ -112,7 +114,11 @@ const refundLines = computed(() => {
   return Object.fromEntries(
     paginatedBookings.value.map(booking => [
       booking.id,
-      refundCountdownText(booking.status, booking.refundDeadlineMs, now),
+      refundCountdownText(
+        booking.status,
+        booking.paymentMethod === 'STRIPE' ? booking.refundDeadlineMs : undefined,
+        now,
+      ),
     ]),
   )
 })
@@ -450,7 +456,7 @@ watch(isLoaded, (ready) => {
         </DialogHeader>
 
         <DialogDescription as="div" class="p-6 text-body1 text-gray-700">
-          <p v-if="selectedBooking?.status === 'checkin-soon'">
+          <p v-if="selectedBooking?.paymentMethod === 'STRIPE' && selectedBooking?.status === 'checkin-soon'">
             Cancellation of the booking now will not be able to request a refund.<br>
             Are you sure you would like to cancel this booking?
           </p>
@@ -464,7 +470,7 @@ watch(isLoaded, (ready) => {
             variant="secondary"
             @click="proceedToCancel"
           >
-            {{ selectedBooking?.status === 'checkin-soon' ? 'Yes, I want to cancel' : 'Yes, I want to cancel and request refund' }}
+            {{ requestsCardRefund(selectedBooking) ? 'Yes, I want to cancel and request refund' : 'Yes, I want to cancel' }}
           </Button>
 
           <DialogClose as-child>

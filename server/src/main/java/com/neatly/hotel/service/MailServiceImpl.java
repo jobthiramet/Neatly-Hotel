@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import com.neatly.hotel.model.Booking;
+import com.neatly.hotel.model.BookingPaymentMethod;
 
 /** Sends transactional mail through the Brevo HTTP API. The API key stays on the server. */
 @Service
@@ -64,9 +65,7 @@ public class MailServiceImpl implements MailService {
 
 	private static String body(Booking booking, boolean refunded) {
 		String guests = booking.getGuests() == 1 ? "1 guest" : booking.getGuests() + " guests";
-		String outcome = refunded
-				? "A refund of " + booking.getCurrency() + " " + booking.getGrandTotal() + " will be returned to your original payment method."
-				: "This cancellation is not eligible for a refund.";
+		String outcome = outcome(booking, refunded);
 		return """
 				Hello %s %s,
 
@@ -86,6 +85,17 @@ public class MailServiceImpl implements MailService {
 				booking.getCheckOut(),
 				guests,
 				outcome);
+	}
+
+	private static String outcome(Booking booking, boolean refunded) {
+		if (refunded) {
+			return "A refund of " + booking.getCurrency() + " " + booking.getGrandTotal()
+					+ " will be returned to the card you paid with.";
+		}
+		if (booking.getPaymentMethod() == BookingPaymentMethod.CASH) {
+			return "No payment has been taken for this booking.";
+		}
+		return "This cancellation is not eligible for a refund.";
 	}
 
 	/** Accepts `Name <email@host>` or a bare email address. */
