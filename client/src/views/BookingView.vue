@@ -39,6 +39,7 @@ import {
 } from '@/data/booking'
 import { countries } from '@/data/countries'
 import { defaultRoomId, roomDetails } from '@/data/rooms'
+import { parkCardCheckout } from '@/lib/cardCheckout'
 import { useRoomsStore, type RoomResponse } from '@/stores/rooms'
 
 const DEFAULT_PHONE_COUNTRY = 'TH'
@@ -452,6 +453,7 @@ async function confirmBooking() {
         stripeError.value = message
         return
       }
+      parkCardCheckout()
       await router.push({
         name: 'booking-failed',
         params: { bookingId: pendingBookingId.value },

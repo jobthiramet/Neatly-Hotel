@@ -83,10 +83,22 @@ async function confirm() {
     submitting.value = false
     return
   }
+  const validated = await loaded.actions.validateElements()
+  if (validated.type === 'error') {
+    error.value = validated.error.validation_errors[0]?.message
+      || validated.error.message
+      || 'Check your card details.'
+    submitting.value = false
+    return
+  }
   const result = await loaded.actions.confirm({ redirect: 'if_required' })
   submitting.value = false
   if (result.type === 'error') {
-    await router.push({ name: 'booking-failed', params: { bookingId: String(route.params.bookingId) } })
+    if (result.error.code === 'paymentFailed') {
+      await router.push({ name: 'booking-failed', params: { bookingId: String(route.params.bookingId) } })
+      return
+    }
+    error.value = result.error.message || 'Check your card details.'
     return
   }
   await router.push({ name: 'booking-success', params: { bookingId: String(route.params.bookingId) } })

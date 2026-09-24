@@ -1,14 +1,79 @@
 <!-- Figma: user > payment failed -->
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useAuth } from '@clerk/vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { getBooking } from '@/api/bookings'
 import { IconErrorCircle } from '@/components/icons'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
+import {
+  confirmOpenSession,
+  confirmParkedCardCheckout,
+  isCardCheckoutParked,
+  releaseCardCheckout,
+} from '@/lib/cardCheckout'
+import { apiErrorMessage } from '@/stores/hotel'
 
 const route = useRoute()
+const router = useRouter()
+const { getToken } = useAuth()
+const submitting = ref(false)
+const notice = ref('')
 const bookingId = computed(() => String(route.params.bookingId || route.query.bookingId || ''))
+
+onBeforeUnmount(releaseCardCheckout)
+
+function blockWhilePaying(event: MouseEvent) {
+  if (submitting.value)
+    event.preventDefault()
+}
+
+async function retryPayment() {
+  if (submitting.value || !bookingId.value || bookingId.value === 'unknown')
+    return
+  submitting.value = true
+  notice.value = ''
+  try {
+    const result = isCardCheckoutParked()
+      ? await confirmParkedCardCheckout()
+      : await confirmSavedSession()
+    if (!result)
+      return
+    if (result.ok) {
+      releaseCardCheckout()
+      await router.push({ name: 'booking-success', params: { bookingId: bookingId.value } })
+      return
+    }
+    notice.value = result.message
+  }
+  finally {
+    submitting.value = false
+  }
+}
+
+async function confirmSavedSession() {
+  const token = await getToken.value?.()
+  if (!token) {
+    notice.value = 'Please sign in to retry payment.'
+    return null
+  }
+  try {
+    const booking = await getBooking(token, bookingId.value)
+    if (booking.status === 'CONFIRMED')
+      return { ok: true as const }
+    if (!booking.clientSecret) {
+      notice.value = 'Card details are no longer available. Go back to payment details.'
+      return null
+    }
+    return await confirmOpenSession(booking.clientSecret)
+  }
+  catch (error) {
+    notice.value = apiErrorMessage(error, 'Could not retry this payment.')
+    return null
+  }
+}
 </script>
 
 <template>
@@ -30,19 +95,27 @@ const bookingId = computed(() => String(route.params.bookingId || route.query.bo
       <div class="mt-10 flex flex-wrap items-center justify-center gap-6">
         <Button
           v-if="bookingId && bookingId !== 'unknown'"
+          type="button"
           variant="ghost"
-          as-child
+          :disabled="submitting"
+          :aria-busy="submitting"
+          @click="retryPayment"
         >
-          <RouterLink :to="{ name: 'booking-pay', params: { bookingId } }">
-            Retry
-          </RouterLink>
+          {{ submitting ? 'Paying…' : 'Retry' }}
         </Button>
         <Button as-child>
-          <RouterLink :to="{ name: 'booking', query: { ...route.query, step: '3' } }">
+          <RouterLink
+            :to="{ name: 'booking', query: { ...route.query, step: '3' } }"
+            :aria-disabled="submitting || undefined"
+            @click="blockWhilePaying"
+          >
             Back to Payment details
           </RouterLink>
         </Button>
       </div>
+      <p v-if="notice" class="mt-4 text-center text-body2 font-normal text-red" role="alert">
+        {{ notice }}
+      </p>
     </main>
     <SiteFooter />
   </div>
