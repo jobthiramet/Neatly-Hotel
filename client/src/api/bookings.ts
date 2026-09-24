@@ -133,6 +133,21 @@ export async function cancelBooking(token: string, id: string) {
   return data.data
 }
 
+export type PromotionPreviewStatus = 'APPLIED' | 'NOT_FOUND' | 'ROOM_NOT_ELIGIBLE' | 'BELOW_MINIMUM'
+
+export interface PromotionPreview {
+  status: PromotionPreviewStatus
+  discountAmount: number | null
+  minPurchaseAmount: number | null
+}
+
+export async function previewPromotionCode(code: string, roomTypeId: string, purchase: number) {
+  const { data } = await api.get<ApiResponse<PromotionPreview>>('/promotion-codes/preview', {
+    params: { code, roomTypeId, purchase },
+  })
+  return data.data
+}
+
 export async function updateBookingPromotion(token: string, id: string, promotionCode: string) {
   const { data } = await api.patch<ApiResponse<BookingResponse>>(`/bookings/${id}/promotion`, { promotionCode }, {
     headers: { Authorization: `Bearer ${token}` },

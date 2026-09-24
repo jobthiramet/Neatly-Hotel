@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel`, `PUT /api/hotel/logo`, and every `/api/promotion-codes/**` endpoint additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel`, `PUT /api/hotel/logo`, and every `/api/promotion-codes/**` endpoint except `GET /api/promotion-codes/preview` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -375,6 +375,18 @@ Admin Promo code page. Codes are **soft deleted**: `DELETE` sets `deletedAt` and
 | `roomTypeIds` | UUID[] | no | max 50; each id must be a non-deleted room type. Empty or omitted means every room type |
 
 `PromotionCodeResponse`: `id`, `code`, `discountType`, `amountOff` (null for percent), `percentOff` (null for fixed), `minPurchaseAmount`, `roomTypes` (`{ id, name }[]`; empty means every room type). Deleted room types are omitted from `roomTypes`.
+
+#### `GET /api/promotion-codes/preview`
+
+Public checkout check for a single code. Used by the booking payment field. Does not list other codes.
+
+- Auth: none
+- Query: `code` (string), `roomTypeId` (UUID), `purchase` (number, pre-discount room + extras, ≥ 0)
+- Response `200`: `ApiResponse<PromotionCodePreviewResponse>`
+  - `status`: `APPLIED`, `NOT_FOUND` (unknown, inactive, or deleted), `ROOM_NOT_ELIGIBLE`, or `BELOW_MINIMUM`
+  - `discountAmount`: positive number when `APPLIED`, otherwise `null`
+  - `minPurchaseAmount`: set when `BELOW_MINIMUM`, otherwise `null`
+- Errors: `400` when `purchase` is missing or negative; `404` when `roomTypeId` is not a live room type
 
 #### `GET /api/promotion-codes`
 
@@ -751,6 +763,7 @@ Newest first. Mark breaking changes with **BREAKING**.
 ### 2026-09-24
 
 - Added agent-only `GET /api/admin/analytics?from&to` for the admin dashboard, including booking and revenue trends, summary comparisons, guest/payment breakdowns and current room availability.
+- Public `GET /api/promotion-codes/preview?code&roomTypeId&purchase` tells checkout whether a code applies. `NOT_FOUND` covers unknown, inactive, and deleted codes. `ROOM_NOT_ELIGIBLE` means the code does not include that room type. `BELOW_MINIMUM` includes `minPurchaseAmount`.
 - `PATCH /api/bookings/{id}/promotion` reprices an open card draft and updates the existing Checkout Session amount. The client secret stays the same.
 - Added agent-only `GET/POST/PUT/DELETE /api/promotion-codes` for the admin Promo code page. Codes can be a fixed THB amount or a percent of the pre-discount total (room + extras), with a minimum purchase and an optional room-type limit (empty `roomTypeIds` means every room type). `DELETE` sets `deletedAt`. Checkout ignores a code that is deleted, below its minimum, or not valid for the booked room type. Run `012_promotion_code_rules.sql` on Supabase before using the supabase profile.
 - Paid extras on `POST /api/bookings` (`specialRequestCodes`) are charged per night: line amount is the catalog price × nights. A 7-night baby cot is THB 2,800. One-night totals are unchanged.

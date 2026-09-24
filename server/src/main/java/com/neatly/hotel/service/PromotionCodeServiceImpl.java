@@ -1,5 +1,6 @@
 package com.neatly.hotel.service;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.HashMap;
@@ -12,8 +13,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.neatly.hotel.dto.PromotionCodePreviewResponse;
 import com.neatly.hotel.dto.PromotionCodeRequest;
 import com.neatly.hotel.dto.PromotionCodeResponse;
+import com.neatly.hotel.dto.PromotionPreviewStatus;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.exception.ResourceNotFoundException;
 import com.neatly.hotel.model.DiscountType;
@@ -79,6 +82,41 @@ public class PromotionCodeServiceImpl implements PromotionCodeService {
 		promotionCodeRepository.save(promo);
 	}
 
+	@Override
+	@Transactional(readOnly = true)
+	public PromotionCodePreviewResponse preview(String code, UUID roomTypeId, BigDecimal purchase) {
+		if (purchase == null || purchase.signum() < 0) {
+			throw new ApiException("Purchase amount must be zero or more", HttpStatus.BAD_REQUEST);
+		}
+		String normalized = code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
+		if (!normalized.matches("^[A-Z0-9-]{1,40}$")) {
+			return PromotionCodePreviewResponse.notFound();
+		}
+		RoomType roomType = roomTypeRepository.findByIdAndDeletedAtIsNull(roomTypeId)
+				.orElseThrow(() -> new ResourceNotFoundException("Room type not found"));
+		PromotionCode promo = promotionCodeRepository
+				.findByCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull(normalized)
+				.orElse(null);
+		if (promo == null) {
+			return PromotionCodePreviewResponse.notFound();
+		}
+		if (!appliesToRoom(promo, roomType)) {
+			return new PromotionCodePreviewResponse(PromotionPreviewStatus.ROOM_NOT_ELIGIBLE, null, null);
+		}
+		BigDecimal minimum = promo.getMinPurchaseAmount() == null ? BigDecimal.ZERO : promo.getMinPurchaseAmount();
+		if (purchase.compareTo(minimum) < 0) {
+			return new PromotionCodePreviewResponse(
+					PromotionPreviewStatus.BELOW_MINIMUM,
+					null,
+					minimum.setScale(2, RoundingMode.HALF_UP));
+		}
+		BigDecimal discount = discountAmount(promo, purchase);
+		if (discount == null || discount.signum() <= 0) {
+			return PromotionCodePreviewResponse.notFound();
+		}
+		return new PromotionCodePreviewResponse(PromotionPreviewStatus.APPLIED, discount, null);
+	}
+
 	private void apply(PromotionCode promo, PromotionCodeRequest request, String code) {
 		promo.setCode(code);
 		promo.setDiscountType(request.discountType());
@@ -126,5 +164,29 @@ public class PromotionCodeServiceImpl implements PromotionCodeService {
 
 	private static String normalizeCode(String code) {
 		return code.trim().toUpperCase(Locale.ROOT);
+	}
+
+	/** Same rule as checkout: an empty room-type list applies to every type. Deleted types are ignored. */
+	private boolean appliesToRoom(PromotionCode promo, RoomType roomType) {
+		if (promo.getRoomTypes() == null || promo.getRoomTypes().isEmpty()) {
+			return true;
+		}
+		return promo.getRoomTypes().stream()
+				.filter(type -> type.getDeletedAt() == null)
+				.anyMatch(type -> roomType.getId().equals(type.getId()));
+	}
+
+	/** Positive discount, or null when the code has no amount. Purchase must already meet the minimum. */
+	private BigDecimal discountAmount(PromotionCode promo, BigDecimal purchase) {
+		if (promo.getDiscountType() == DiscountType.PERCENT) {
+			if (promo.getPercentOff() == null) {
+				return null;
+			}
+			return purchase.multiply(promo.getPercentOff()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+		}
+		if (promo.getAmountOff() == null) {
+			return null;
+		}
+		return promo.getAmountOff().setScale(2, RoundingMode.HALF_UP);
 	}
 }

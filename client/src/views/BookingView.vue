@@ -10,7 +10,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { toast } from 'vue-sonner'
 import { api } from '@/api/client'
-import { createBooking, updateBookingPromotion, type CreateBookingRequest } from '@/api/bookings'
+import { createBooking, previewPromotionCode, updateBookingPromotion, type CreateBookingRequest, type PromotionPreview } from '@/api/bookings'
 import BookingBasicInfoStep from '@/components/booking/BookingBasicInfoStep.vue'
 import BookingDetailSidebar from '@/components/booking/BookingDetailSidebar.vue'
 import BookingPaymentStep from '@/components/booking/BookingPaymentStep.vue'
@@ -32,8 +32,8 @@ import {
   BOOKING_HOLD_SECONDS,
   CHECKOUT_STEPS,
   addonLineLabel,
+  formatThb,
   nightsBetween,
-  promotionDiscount,
   specialRequests,
   standardRequests,
 } from '@/data/booking'
@@ -169,7 +169,11 @@ const extraItems = computed(() =>
     .filter(item => selectedRequestIds.value.includes(item.id))
     .map(item => ({ label: addonLineLabel(item.label, nights.value), amount: item.price * nights.value })),
 )
-const promotionAmount = computed(() => promotionDiscount(payment.promotionCode))
+const purchaseAmount = computed(() => roomAmount.value + extraItems.value.reduce((sum, item) => sum + item.amount, 0))
+const promoDiscount = ref(0)
+const promoError = ref('')
+let promoTicket = 0
+const promotionAmount = computed(() => promoDiscount.value)
 const lineItems = computed(() => {
   const items = [
     { label: rooms.value > 1 ? `${rooms.value} × ${roomName.value} Room` : `${roomName.value} Room`, amount: roomAmount.value },
@@ -316,6 +320,65 @@ async function ensureStripeSession() {
 
 const startStripeSession = useDebounceFn(ensureStripeSession, 400)
 
+function promoMessage(preview: PromotionPreview) {
+  if (preview.status === 'ROOM_NOT_ELIGIBLE')
+    return 'This promo code isn\'t valid for this room. Try another code or room'
+  if (preview.status === 'BELOW_MINIMUM' && preview.minPurchaseAmount != null)
+    return `This promo code needs a minimum purchase of ${formatThb(preview.minPurchaseAmount)} THB.`
+  return 'This promo code doesn\'t exist.'
+}
+
+async function checkPromo() {
+  const code = payment.promotionCode.trim()
+  const typeId = roomTypeId.value
+  const purchase = purchaseAmount.value
+  if (!code) {
+    promoError.value = ''
+    promoDiscount.value = 0
+    return
+  }
+  if (!typeId)
+    return
+  const ticket = ++promoTicket
+  try {
+    const preview = await previewPromotionCode(code, typeId, purchase)
+    if (ticket !== promoTicket)
+      return
+    if (preview.status === 'APPLIED') {
+      promoError.value = ''
+      promoDiscount.value = preview.discountAmount ?? 0
+      return
+    }
+    promoDiscount.value = 0
+    promoError.value = promoMessage(preview)
+  }
+  catch {
+    if (ticket !== promoTicket)
+      return
+    promoDiscount.value = 0
+    promoError.value = 'Could not check this promo code.'
+  }
+}
+
+const queuePromoCheck = useDebounceFn(() => checkPromo(), 400)
+
+watch(
+  () => [payment.promotionCode, roomTypeId.value ?? '', purchaseAmount.value] as const,
+  (next, previous) => {
+    if (!payment.promotionCode.trim()) {
+      promoTicket += 1
+      promoError.value = ''
+      promoDiscount.value = 0
+      return
+    }
+    if (!previous || next[0] !== previous[0]) {
+      promoError.value = ''
+      promoDiscount.value = 0
+    }
+    void queuePromoCheck()
+  },
+)
+
 watch(
   () => [
     step.value,
@@ -352,6 +415,12 @@ async function confirmBooking() {
   const token = await sessionToken()
   if (!token) {
     toast.error('Please sign in to complete this booking.')
+    return
+  }
+  queuePromoCheck.cancel()
+  await checkPromo()
+  if (promoError.value) {
+    document.getElementById('promotion-code')?.focus()
     return
   }
   submitting.value = true
@@ -632,6 +701,7 @@ watch(
               v-model:payment="payment"
               :client-secret="clientSecret"
               :stripe-error="stripeError"
+              :promo-error="promoError"
             />
 
             <div class="mt-10 hidden items-center justify-between gap-4 lg:flex">

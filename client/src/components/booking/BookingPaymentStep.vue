@@ -15,6 +15,7 @@ const payment = defineModel<CheckoutPayment>('payment', { required: true })
 const props = defineProps<{
   clientSecret: string | null
   stripeError: string
+  promoError: string
 }>()
 
 const elementHost = ref<HTMLElement | null>(null)
@@ -199,6 +200,7 @@ const methodLabel: Record<CheckoutPaymentMethod, string> = {
         label="Promotion Code"
         for="promotion-code"
         class="border-t border-gray-300 pt-6"
+        :error="promoError"
       >
         <Input
           id="promotion-code"
@@ -206,6 +208,8 @@ const methodLabel: Record<CheckoutPaymentMethod, string> = {
           autocomplete="off"
           spellcheck="false"
           placeholder="NEATLYNEW400"
+          :aria-invalid="!!promoError"
+          :aria-describedby="promoError ? 'promotion-code-error' : undefined"
           @update:model-value="onPromotionCodeInput"
         />
       </FormField>

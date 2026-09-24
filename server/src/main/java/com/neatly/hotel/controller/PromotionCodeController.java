@@ -1,5 +1,6 @@
 package com.neatly.hotel.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -11,10 +12,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.neatly.hotel.dto.ApiResponse;
+import com.neatly.hotel.dto.PromotionCodePreviewResponse;
 import com.neatly.hotel.dto.PromotionCodeRequest;
 import com.neatly.hotel.dto.PromotionCodeResponse;
 import com.neatly.hotel.service.PromotionCodeService;
@@ -42,6 +45,15 @@ public class PromotionCodeController {
 	@Operation(summary = "List promo codes", description = "Admin Promo code. Non-deleted codes, sorted by code. Requires a Clerk session and agent role.")
 	public ApiResponse<List<PromotionCodeResponse>> list() {
 		return ApiResponse.ok(promotionCodeService.findAll());
+	}
+
+	@GetMapping("/preview")
+	@Operation(summary = "Preview a promo code", description = "Public checkout check for one code, one room type, and a pre-discount purchase total. Does not list other codes.")
+	public ApiResponse<PromotionCodePreviewResponse> preview(
+			@RequestParam String code,
+			@RequestParam UUID roomTypeId,
+			@RequestParam BigDecimal purchase) {
+		return ApiResponse.ok(promotionCodeService.preview(code, roomTypeId, purchase));
 	}
 
 	@GetMapping("/{id}")
