@@ -2,6 +2,7 @@ package com.neatly.hotel.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,6 +28,7 @@ import com.stripe.param.RefundCreateParams;
 import com.stripe.param.RefundListParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import com.stripe.param.checkout.SessionRetrieveParams;
+import com.stripe.param.checkout.SessionUpdateParams;
 
 @Service
 public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
@@ -66,6 +68,7 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 											.build())
 									.build())
 							.build());
+			cardOnly(builder);
 			trySetIntegrationIdentifier(builder, integration);
 			Session session = client().v1().checkout().sessions().create(builder.build());
 			return new SessionResult(
@@ -75,6 +78,38 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 		} catch (StripeException ex) {
 			log.warn("Stripe checkout session failed: {}", ex.getMessage());
 			throw new ApiException("Could not start card payment", HttpStatus.BAD_GATEWAY);
+		}
+	}
+
+	@Override
+	public void updateSessionAmount(String checkoutSessionId, Booking booking) {
+		requireSecret();
+		try {
+			var items = client().v1().checkout().sessions().lineItems().list(checkoutSessionId);
+			if (items.getData() == null || items.getData().isEmpty()) {
+				throw new ApiException("Could not update card payment", HttpStatus.BAD_GATEWAY);
+			}
+			String lineItemId = items.getData().get(0).getId();
+			String name = booking.getRoomNameSnapshot() == null || booking.getRoomNameSnapshot().isBlank()
+					? "Room"
+					: booking.getRoomNameSnapshot();
+			SessionUpdateParams params = SessionUpdateParams.builder()
+					.addLineItem(SessionUpdateParams.LineItem.builder()
+							.setId(lineItemId)
+							.setQuantity(1L)
+							.setPriceData(SessionUpdateParams.LineItem.PriceData.builder()
+									.setCurrency(booking.getCurrency().toLowerCase())
+									.setUnitAmount(toStripeAmount(booking.getGrandTotal()))
+									.setProductData(SessionUpdateParams.LineItem.PriceData.ProductData.builder()
+											.setName(name)
+											.build())
+									.build())
+							.build())
+					.build();
+			client().v1().checkout().sessions().update(checkoutSessionId, params);
+		} catch (StripeException ex) {
+			log.warn("Stripe checkout amount update failed: {}", ex.getMessage());
+			throw new ApiException("Could not update card payment", HttpStatus.BAD_GATEWAY);
 		}
 	}
 
@@ -182,6 +217,13 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 
 	private static long toStripeAmount(BigDecimal amount) {
 		return amount.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact();
+	}
+
+	/** Dynamic methods stay on, but every non-card type (including PromptPay) is hidden. */
+	private static void cardOnly(SessionCreateParams.Builder builder) {
+		builder.addAllExcludedPaymentMethodType(Arrays.stream(SessionCreateParams.ExcludedPaymentMethodType.values())
+				.filter(type -> type != SessionCreateParams.ExcludedPaymentMethodType.CARD)
+				.toList());
 	}
 
 	private static void trySetIntegrationIdentifier(SessionCreateParams.Builder builder, String value) {

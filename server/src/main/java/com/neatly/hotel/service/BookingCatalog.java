@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** Figma checkout extras. Prices are THB and snapshotted onto booking_items. */
+/** Figma checkout extras. Prices are THB per night and snapshotted onto booking_items. */
 public final class BookingCatalog {
 
 	public record Addon(String code, String label, BigDecimal price) {

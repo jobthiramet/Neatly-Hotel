@@ -9,12 +9,14 @@ import { Input } from '@/components/ui/input'
 import { PaymentOption } from '@/components/ui/payment-option'
 import { RadioGroup } from '@/components/ui/radio-group'
 import type { CheckoutPayment, CheckoutPaymentMethod } from '@/data/booking'
+import { attachCardCheckout, isCardCheckoutParked, releaseCardCheckout } from '@/lib/cardCheckout'
 
 const payment = defineModel<CheckoutPayment>('payment', { required: true })
 
 const props = defineProps<{
   clientSecret: string | null
   stripeError: string
+  promoError: string
 }>()
 
 const elementHost = ref<HTMLElement | null>(null)
@@ -36,7 +38,9 @@ function stripeInstance() {
 }
 
 async function mountElement(secret: string) {
-  unmountElement()
+  releaseCardCheckout()
+  paymentElement = null
+  checkout = null
   elementReady.value = false
   await nextTick()
   if (!elementHost.value)
@@ -62,12 +66,21 @@ async function mountElement(secret: string) {
     },
   })
   paymentElement = checkout.createPaymentElement({ layout: 'tabs' })
-  paymentElement.mount(elementHost.value)
+  const host = document.createElement('div')
+  elementHost.value.replaceChildren(host)
+  paymentElement.mount(host)
+  attachCardCheckout(checkout, paymentElement, host)
   elementReady.value = true
 }
 
 function unmountElement() {
-  paymentElement?.unmount()
+  if (isCardCheckoutParked()) {
+    paymentElement = null
+    checkout = null
+    elementReady.value = false
+    return
+  }
+  releaseCardCheckout()
   paymentElement = null
   checkout = null
   elementReady.value = false
@@ -87,15 +100,39 @@ watch(
 
 onBeforeUnmount(unmountElement)
 
-async function confirmCard() {
+async function confirmCard(beforeConfirm?: () => Promise<void>) {
   if (!checkout)
-    return { ok: false as const, message: 'Card form is not ready yet.' }
+    return { ok: false as const, recoverable: true, message: 'Card form is not ready yet.' }
   const loaded = await checkout.loadActions()
   if (loaded.type === 'error')
     return { ok: false as const, message: loaded.error.message || 'Could not confirm payment.' }
+  const validated = await loaded.actions.validateElements()
+  if (validated.type === 'error') {
+    const message = validated.error.code === 'no_elements'
+      ? 'Card form is not ready yet.'
+      : (validated.error.validation_errors[0]?.message || validated.error.message || 'Check your card details.')
+    return { ok: false as const, recoverable: true, message }
+  }
+  if (beforeConfirm) {
+    try {
+      const updated = await loaded.actions.runServerUpdate(beforeConfirm)
+      if (updated.type === 'error')
+        return { ok: false as const, recoverable: true, message: updated.error.message || 'Could not apply the promotion code.' }
+    }
+    catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not apply the promotion code.'
+      return { ok: false as const, recoverable: true, message }
+    }
+  }
   const result = await loaded.actions.confirm({ redirect: 'if_required' })
-  if (result.type === 'error')
-    return { ok: false as const, message: result.error.message || 'Payment failed.' }
+  if (result.type === 'error') {
+    const declined = result.error.code === 'paymentFailed'
+    return {
+      ok: false as const,
+      recoverable: !declined,
+      message: result.error.message || (declined ? 'Payment failed.' : 'Check your card details.'),
+    }
+  }
   return { ok: true as const }
 }
 
@@ -188,6 +225,7 @@ const methodLabel: Record<CheckoutPaymentMethod, string> = {
         label="Promotion Code"
         for="promotion-code"
         class="border-t border-gray-300 pt-6"
+        :error="promoError"
       >
         <Input
           id="promotion-code"
@@ -195,6 +233,8 @@ const methodLabel: Record<CheckoutPaymentMethod, string> = {
           autocomplete="off"
           spellcheck="false"
           placeholder="NEATLYNEW400"
+          :aria-invalid="!!promoError"
+          :aria-describedby="promoError ? 'promotion-code-error' : undefined"
           @update:model-value="onPromotionCodeInput"
         />
       </FormField>

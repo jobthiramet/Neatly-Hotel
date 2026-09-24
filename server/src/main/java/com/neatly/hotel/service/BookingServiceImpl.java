@@ -24,6 +24,7 @@ import com.neatly.hotel.dto.BookingResponse;
 import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
 import com.neatly.hotel.dto.PageResponse;
+import com.neatly.hotel.dto.UpdatePromotionCodeRequest;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.exception.ResourceNotFoundException;
 import com.neatly.hotel.model.Booking;
@@ -32,6 +33,7 @@ import com.neatly.hotel.model.BookingItemKind;
 import com.neatly.hotel.model.BookingPaymentMethod;
 import com.neatly.hotel.model.BookingRoom;
 import com.neatly.hotel.model.BookingStatus;
+import com.neatly.hotel.model.DiscountType;
 import com.neatly.hotel.model.Payment;
 import com.neatly.hotel.model.PaymentKind;
 import com.neatly.hotel.model.PaymentProvider;
@@ -237,6 +239,33 @@ public class BookingServiceImpl implements BookingService {
 	}
 
 	@Override
+	public BookingResponse updatePromotion(String clerkUserId, UUID bookingId, UpdatePromotionCodeRequest request) {
+		Booking booking = requireMine(clerkUserId, bookingId);
+		if (booking.getStatus() != BookingStatus.PENDING_PAYMENT
+				|| booking.getPaymentMethod() != BookingPaymentMethod.STRIPE) {
+			throw new ApiException("This booking cannot change its promotion code", HttpStatus.BAD_REQUEST);
+		}
+		List<String> addons = booking.getItems().stream()
+				.filter(item -> item.getKind() == BookingItemKind.ADDON)
+				.map(BookingItem::getCode)
+				.toList();
+		price(booking, booking.getRoomType(), addons, request.promotionCode());
+		Payment charge = latestStripeCharge(booking)
+				.orElseThrow(() -> new ApiException("This booking has no card payment", HttpStatus.BAD_REQUEST));
+		String sessionId = charge.getStripeCheckoutSessionId();
+		if (sessionId == null || sessionId.isBlank()) {
+			throw new ApiException("This booking has no card payment", HttpStatus.BAD_REQUEST);
+		}
+		BigDecimal nextTotal = booking.getGrandTotal();
+		boolean amountChanged = charge.getAmount() == null || charge.getAmount().compareTo(nextTotal) != 0;
+		charge.setAmount(nextTotal);
+		if (amountChanged) {
+			stripe.updateSessionAmount(sessionId, booking);
+		}
+		return toResponse(bookingRepository.save(booking), null);
+	}
+
+	@Override
 	public void handleStripeEvent(String payload, String signature) {
 		StripeCheckoutGateway.WebhookEvent event = stripe.parseEvent(payload, signature);
 		if (stripeEventRepository.existsById(event.eventId())) {
@@ -340,16 +369,20 @@ public class BookingServiceImpl implements BookingService {
 		for (String code : distinct(specialCodes)) {
 			BookingCatalog.Addon addon = BookingCatalog.addon(code)
 					.orElseThrow(() -> new ApiException("Unknown special request: " + code, HttpStatus.BAD_REQUEST));
-			booking.getItems().add(item(booking, BookingItemKind.ADDON, addon.code(), addon.label(), 1, addon.price(), addon.price(), sort++));
-			extras = extras.add(addon.price());
+			BigDecimal addonTotal = addon.price().multiply(BigDecimal.valueOf(nights)).setScale(2, RoundingMode.HALF_UP);
+			booking.getItems().add(item(booking, BookingItemKind.ADDON, addon.code(), addon.label(), nights, addon.price(), addonTotal, sort++));
+			extras = extras.add(addonTotal);
 		}
 
-		BigDecimal discount = BigDecimal.ZERO;
+		BigDecimal purchase = roomSubtotal.add(extras).setScale(2, RoundingMode.HALF_UP);
+		BigDecimal discount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 		if (promotionCode != null && !promotionCode.isBlank()) {
-			PromotionCode promo = promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrue(promotionCode.trim())
+			PromotionCode promo = promotionCodeRepository
+					.findByCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull(promotionCode.trim())
 					.orElse(null);
-			if (promo != null) {
-				discount = promo.getAmountOff().negate().setScale(2, RoundingMode.HALF_UP);
+			BigDecimal off = promo == null ? null : discountAmount(promo, roomType, purchase);
+			if (off != null && off.signum() > 0) {
+				discount = off.negate();
 				booking.setPromotionCode(promo);
 				booking.getItems().add(item(
 						booking,
@@ -357,7 +390,7 @@ public class BookingServiceImpl implements BookingService {
 						promo.getCode(),
 						"Promotion Code",
 						1,
-						promo.getAmountOff().negate(),
+						discount,
 						discount,
 						sort));
 			}
@@ -369,6 +402,37 @@ public class BookingServiceImpl implements BookingService {
 		booking.setDiscountTotal(discount);
 		booking.setGrandTotal(total);
 		booking.setCurrency("THB");
+	}
+
+	/**
+	 * Positive discount for a code that applies, or null when it does not.
+	 * Minimum purchase and a percent discount both use the pre-discount total (room + extras).
+	 * An empty room-type list applies to every type. A fixed amount can exceed the total; the grand total is floored at zero.
+	 */
+	private BigDecimal discountAmount(PromotionCode promo, RoomType roomType, BigDecimal purchase) {
+		BigDecimal minimum = promo.getMinPurchaseAmount() == null ? BigDecimal.ZERO : promo.getMinPurchaseAmount();
+		if (purchase.compareTo(minimum) < 0 || !appliesToRoom(promo, roomType)) {
+			return null;
+		}
+		if (promo.getDiscountType() == DiscountType.PERCENT) {
+			if (promo.getPercentOff() == null) {
+				return null;
+			}
+			return purchase.multiply(promo.getPercentOff()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+		}
+		if (promo.getAmountOff() == null) {
+			return null;
+		}
+		return promo.getAmountOff().setScale(2, RoundingMode.HALF_UP);
+	}
+
+	private boolean appliesToRoom(PromotionCode promo, RoomType roomType) {
+		if (promo.getRoomTypes() == null || promo.getRoomTypes().isEmpty()) {
+			return true;
+		}
+		return promo.getRoomTypes().stream()
+				.filter(type -> type.getDeletedAt() == null)
+				.anyMatch(type -> roomType.getId().equals(type.getId()));
 	}
 
 	/** Refunds a succeeded Stripe charge. Cash and unpaid bookings return false without calling Stripe. */

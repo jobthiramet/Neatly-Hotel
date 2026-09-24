@@ -129,6 +129,12 @@ const router = createRouter({
           meta: { adminNav: 'admin-rooms' },
         },
         {
+          path: 'promo-codes',
+          name: 'admin-promo-codes',
+          component: () => import('../views/admin/PromoCodeView.vue'),
+          meta: { title: 'Promo code' },
+        },
+        {
           path: 'chatbot',
           name: 'admin-chatbot-setup',
           component: () => import('../views/admin/ChatbotSetupView.vue'),

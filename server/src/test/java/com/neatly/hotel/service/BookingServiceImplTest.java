@@ -31,11 +31,13 @@ import org.springframework.http.HttpStatus;
 
 import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
+import com.neatly.hotel.dto.UpdatePromotionCodeRequest;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.model.Booking;
 import com.neatly.hotel.model.BookingPaymentMethod;
 import com.neatly.hotel.model.BookingRoom;
 import com.neatly.hotel.model.BookingStatus;
+import com.neatly.hotel.model.DiscountType;
 import com.neatly.hotel.model.Payment;
 import com.neatly.hotel.model.PaymentKind;
 import com.neatly.hotel.model.PaymentProvider;
@@ -94,6 +96,159 @@ class BookingServiceImplTest {
 		verify(bookingRepository).save(saved.capture());
 		assertEquals(PaymentStatus.UNPAID, saved.getValue().getPayments().get(0).getStatus());
 		assertEquals(1, saved.getValue().getRoomsCount());
+	}
+
+	@Test
+	void updatingPromotionChangesTheTotalOnTheSameCheckoutSession() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		Booking booking = new Booking();
+		UUID bookingId = UUID.randomUUID();
+		booking.setId(bookingId);
+		booking.setUserId("user_abc");
+		booking.setStatus(BookingStatus.PENDING_PAYMENT);
+		booking.setPaymentMethod(BookingPaymentMethod.STRIPE);
+		booking.setCurrency("THB");
+		booking.setGuests(2);
+		booking.setCheckIn(LocalDate.now().plusDays(2));
+		booking.setCheckOut(LocalDate.now().plusDays(3));
+		BookingRoom booked = new BookingRoom();
+		booked.setBooking(booking);
+		booked.setRoomType(roomType);
+		booking.getRooms().add(booked);
+		Payment charge = new Payment();
+		charge.setProvider(PaymentProvider.STRIPE);
+		charge.setKind(PaymentKind.CHARGE);
+		charge.setStatus(PaymentStatus.PENDING);
+		charge.setAmount(new BigDecimal("2500.00"));
+		charge.setStripeCheckoutSessionId("cs_test");
+		booking.getPayments().add(charge);
+		when(bookingRepository.findByIdAndUserId(bookingId, "user_abc")).thenReturn(Optional.of(booking));
+
+		var response = service.updatePromotion("user_abc", bookingId, new UpdatePromotionCodeRequest("NEATLYNEW400"));
+
+		assertEquals(new BigDecimal("2100.00"), response.grandTotal());
+		assertEquals(new BigDecimal("-400.00"), response.discountTotal());
+		assertEquals(new BigDecimal("2100.00"), charge.getAmount());
+		assertNull(response.clientSecret());
+		verify(stripe).updateSessionAmount("cs_test", booking);
+	}
+
+	@Test
+	void updatingPromotionSkipsStripeWhenTheTotalDoesNotChange() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		Booking booking = new Booking();
+		UUID bookingId = UUID.randomUUID();
+		booking.setId(bookingId);
+		booking.setUserId("user_abc");
+		booking.setStatus(BookingStatus.PENDING_PAYMENT);
+		booking.setPaymentMethod(BookingPaymentMethod.STRIPE);
+		booking.setCurrency("THB");
+		booking.setGuests(2);
+		booking.setCheckIn(LocalDate.now().plusDays(2));
+		booking.setCheckOut(LocalDate.now().plusDays(3));
+		BookingRoom booked = new BookingRoom();
+		booked.setBooking(booking);
+		booked.setRoomType(roomType);
+		booking.getRooms().add(booked);
+		Payment charge = new Payment();
+		charge.setProvider(PaymentProvider.STRIPE);
+		charge.setKind(PaymentKind.CHARGE);
+		charge.setStatus(PaymentStatus.PENDING);
+		charge.setAmount(new BigDecimal("2500.00"));
+		charge.setStripeCheckoutSessionId("cs_test");
+		booking.getPayments().add(charge);
+		when(bookingRepository.findByIdAndUserId(bookingId, "user_abc")).thenReturn(Optional.of(booking));
+
+		var response = service.updatePromotion("user_abc", bookingId, new UpdatePromotionCodeRequest(""));
+
+		assertEquals(new BigDecimal("2500.00"), response.grandTotal());
+		assertNull(response.clientSecret());
+		verify(stripe, never()).updateSessionAmount(any(), any());
+	}
+
+	@Test
+	void percentPromoDiscountsRoomAndExtras() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), null);
+		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(0L);
+		PromotionCode promo = promo();
+		promo.setCode("SAVE10");
+		promo.setDiscountType(DiscountType.PERCENT);
+		promo.setAmountOff(null);
+		promo.setPercentOff(new BigDecimal("10.00"));
+		when(promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull("SAVE10"))
+				.thenReturn(Optional.of(promo));
+
+		var response = service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, "SAVE10", List.of("airport-transfer")));
+
+		assertEquals(new BigDecimal("2700.00"), response.roomSubtotal().add(response.extrasTotal()));
+		assertEquals(new BigDecimal("-270.00"), response.discountTotal());
+		assertEquals(new BigDecimal("2430.00"), response.grandTotal());
+	}
+
+	@Test
+	void promoBelowMinimumPurchaseIsIgnored() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(0L);
+		PromotionCode promo = promo();
+		promo.setMinPurchaseAmount(new BigDecimal("10000.00"));
+		when(promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull("NEATLYNEW400"))
+				.thenReturn(Optional.of(promo));
+
+		var response = service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, "NEATLYNEW400", List.of("airport-transfer")));
+
+		assertEquals(new BigDecimal("0.00"), response.discountTotal());
+		assertEquals(new BigDecimal("2700.00"), response.grandTotal());
+		assertNull(response.promotionCode());
+	}
+
+	@Test
+	void promoLimitedToAnotherRoomTypeIsIgnored() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(0L);
+		RoomType other = new RoomType();
+		other.setId(UUID.randomUUID());
+		PromotionCode promo = promo();
+		promo.getRoomTypes().add(other);
+		when(promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull("NEATLYNEW400"))
+				.thenReturn(Optional.of(promo));
+
+		var response = service.create("user_abc", request(roomType.getId(), BookingPaymentMethod.CASH, "NEATLYNEW400", List.of()));
+
+		assertEquals(new BigDecimal("0.00"), response.discountTotal());
+		assertEquals(new BigDecimal("2500.00"), response.grandTotal());
+	}
+
+	@Test
+	void addonPriceIsChargedPerNight() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), null);
+		when(roomTypeRepository.findByIdAndDeletedAtIsNull(roomType.getId())).thenReturn(Optional.of(roomType));
+		when(bookingRepository.occupiedUnits(eq(roomType.getId()), any(), any(), any(), isNull(), any())).thenReturn(0L);
+
+		LocalDate checkIn = LocalDate.now().plusDays(2);
+		var response = service.create("user_abc", new CreateBookingRequest(
+				roomType.getId(),
+				checkIn,
+				checkIn.plusDays(7),
+				2,
+				1,
+				"Kate",
+				"Cho",
+				"kate@example.com",
+				"0812345678",
+				"Thailand",
+				LocalDate.of(1990, 1, 1),
+				List.of(),
+				List.of("baby-cot"),
+				null,
+				null,
+				BookingPaymentMethod.CASH));
+
+		assertEquals(new BigDecimal("2800.00"), response.extrasTotal());
+		assertEquals(new BigDecimal("17500.00"), response.roomSubtotal());
+		assertEquals(new BigDecimal("20300.00"), response.grandTotal());
 	}
 
 	@Test
@@ -363,7 +518,7 @@ class BookingServiceImplTest {
 		roomType.setPromotionPrice(promoPrice);
 		roomType.setCapacity(2);
 		when(roomTypeRepository.countBookableUnits(eq(roomType.getId()), any())).thenReturn(4L);
-		when(promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrue("NEATLYNEW400"))
+		when(promotionCodeRepository.findByCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull("NEATLYNEW400"))
 				.thenReturn(Optional.of(promo()));
 		return roomType;
 	}
@@ -371,7 +526,9 @@ class BookingServiceImplTest {
 	private PromotionCode promo() {
 		PromotionCode promo = new PromotionCode();
 		promo.setCode("NEATLYNEW400");
+		promo.setDiscountType(DiscountType.FIXED);
 		promo.setAmountOff(new BigDecimal("400.00"));
+		promo.setMinPurchaseAmount(new BigDecimal("0.00"));
 		promo.setActive(true);
 		return promo;
 	}
