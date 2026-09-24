@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel`, `PUT /api/hotel/logo`, and every `/api/promotion-codes/**` endpoint except `GET /api/promotion-codes/preview` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel`, `PUT /api/hotel/logo`, `PUT /api/chatbot`, and every `/api/promotion-codes/**` endpoint except `GET /api/promotion-codes/preview` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -424,6 +424,45 @@ Soft-delete a code.
 - Response `204`: empty body
 - Errors: `401`; `403`; `404`
 
+### Chatbot script
+
+One row for the guest assistant. Booking and Cancel Booking login buttons stay in the client. Room cards still resolve names, photos and prices from the client room catalog; `roomIds` are those slugs, not `room_types.id`.
+
+`ChatbotScriptResponse`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `greeting` | string | first bot message |
+| `autoReply` | string | used when typed text does not match a topic label |
+| `topics` | array | suggestion topics, in display order |
+
+Each topic is one of:
+
+| `format` | Required fields |
+| --- | --- |
+| `message` | `id`, `label`, `text` |
+| `room-type` | `id`, `label`, `title`, `actionLabel`, `roomIds` (may be empty) |
+| `option-with-details` | `id`, `label`, `title`, `options[]` of `{ label, detail }` |
+
+`enabled` is always `true` in the response.
+
+#### `GET /api/chatbot`
+
+- Auth: none (public)
+- Response `200`: `ApiResponse<ChatbotScriptResponse>`
+- Errors: `404` when the script row has not been seeded; `500` when stored topics are not valid JSON
+
+#### `PUT /api/chatbot`
+
+Replaces greeting, auto-reply and the whole topic list.
+
+- Auth: Clerk session token and `role = agent`
+- Body: `UpdateChatbotScriptRequest` with `greeting`, `autoReply` and a non-empty `topics` array. Topic ids must be unique. Each topic must include the fields for its `format`.
+- Response `200`: `ApiResponse<ChatbotScriptResponse>` with `message: "Chatbot script updated"`
+- Errors: `400` validation; `401`; `403`; `404` when the script row is missing
+
+Run `014_chatbot_script.sql` then `014_chatbot_script_seed.sql` on Supabase before using the supabase profile. The local profile loads the seed automatically.
+
 ### Hotel information
 
 Single record for the hotel, shown on the Home `#about` section and edited in admin / hotel information.
@@ -761,6 +800,8 @@ Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
 Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-24
+
+- Added public `GET /api/chatbot` and agent-only `PUT /api/chatbot` for the guest assistant script (greeting, auto-reply and suggestion topics). Run `014_chatbot_script.sql` then `014_chatbot_script_seed.sql` on Supabase before using the supabase profile.
 
 - Added agent-only `GET /api/admin/analytics?from&to` for the admin dashboard, including booking and revenue trends, summary comparisons, guest/payment breakdowns and current room availability.
 - Public `GET /api/promotion-codes/preview?code&roomTypeId&purchase` tells checkout whether a code applies. `NOT_FOUND` covers unknown, inactive, and deleted codes. `ROOM_NOT_ELIGIBLE` means the code does not include that room type. `BELOW_MINIMUM` includes `minPurchaseAmount`.

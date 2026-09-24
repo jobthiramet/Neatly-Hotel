@@ -1,4 +1,4 @@
--- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001–012.
+-- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001–014.
 -- Reference for reading the model. For setup, run the numbered files in order; they also create storage buckets,
 -- row level security, policies, triggers, views and seed data. Every statement below is safe to re-run.
 -- Keep this file in sync when a numbered migration changes a table.
@@ -263,3 +263,14 @@ create table if not exists stripe_events (
   stripe_object_id varchar(255),
   processed_at timestamptz not null
 );
+
+-- Guest chatbot script. One row. topics is a JSON array stored as text.
+create table if not exists chatbot_script (
+  id uuid primary key,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  greeting text not null,
+  auto_reply text not null,
+  topics text not null
+);
+create unique index if not exists chatbot_script_singleton on chatbot_script ((true));
