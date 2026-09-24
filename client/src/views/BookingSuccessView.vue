@@ -8,7 +8,7 @@ import { getBooking, type BookingResponse } from '@/api/bookings'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import SiteNavbar from '@/components/layout/SiteNavbar.vue'
 import { Button } from '@/components/ui/button'
-import { formatThb } from '@/data/booking'
+import { addonLineLabel, formatThb } from '@/data/booking'
 
 const route = useRoute()
 const { getToken } = useAuth()
@@ -97,7 +97,7 @@ onMounted(async () => {
             class="flex justify-between gap-4"
             :class="item.kind === 'DISCOUNT' ? 'text-green-300' : ''"
           >
-            <dt>{{ item.label }}</dt>
+            <dt>{{ item.kind === 'ADDON' ? addonLineLabel(item.label, item.quantity) : item.label }}</dt>
             <dd>{{ formatThb(item.amount) }}</dd>
           </div>
           <div class="mt-2 flex justify-between border-t border-green-600 pt-4 text-h5">

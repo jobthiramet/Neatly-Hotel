@@ -2,6 +2,7 @@ package com.neatly.hotel.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -66,6 +67,7 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 											.build())
 									.build())
 							.build());
+			cardOnly(builder);
 			trySetIntegrationIdentifier(builder, integration);
 			Session session = client().v1().checkout().sessions().create(builder.build());
 			return new SessionResult(
@@ -182,6 +184,13 @@ public class StripeCheckoutGatewayImpl implements StripeCheckoutGateway {
 
 	private static long toStripeAmount(BigDecimal amount) {
 		return amount.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact();
+	}
+
+	/** Dynamic methods stay on, but every non-card type (including PromptPay) is hidden. */
+	private static void cardOnly(SessionCreateParams.Builder builder) {
+		builder.addAllExcludedPaymentMethodType(Arrays.stream(SessionCreateParams.ExcludedPaymentMethodType.values())
+				.filter(type -> type != SessionCreateParams.ExcludedPaymentMethodType.CARD)
+				.toList());
 	}
 
 	private static void trySetIntegrationIdentifier(SessionCreateParams.Builder builder, String value) {

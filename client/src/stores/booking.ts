@@ -2,7 +2,7 @@ import { parseDate } from '@internationalized/date'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { cancelBooking, changeBookingDates, getBooking, listBookings, type BookingResponse } from '@/api/bookings'
-import type { BookingStatus, PriceBreakdownItem, UserBooking } from '@/data/booking'
+import { addonLineLabel, type BookingStatus, type PriceBreakdownItem, type UserBooking } from '@/data/booking'
 import superiorGardenImage from '@/assets/home/room-superior-garden-view.webp'
 
 /** Asia/Bangkok has no DST; matches server HOTEL_ZONE check-in at 14:00. */
@@ -79,7 +79,7 @@ export function toUserBooking(booking: BookingResponse, now = Date.now()): UserB
     paymentMethodText: booking.paymentMethodText,
     paymentMethod: booking.paymentMethod,
     breakdown: booking.items.map((item): PriceBreakdownItem => ({
-      label: item.label,
+      label: item.kind === 'ADDON' ? addonLineLabel(item.label, item.quantity) : item.label,
       amount: item.amount,
       isDiscount: item.kind === 'DISCOUNT',
     })),

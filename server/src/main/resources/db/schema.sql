@@ -1,4 +1,4 @@
--- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001–011.
+-- Snapshot of the full Supabase schema (tables, constraints, indexes) after 001–012.
 -- Reference for reading the model. For setup, run the numbered files in order; they also create storage buckets,
 -- row level security, policies, triggers, views and seed data. Every statement below is safe to re-run.
 -- Keep this file in sync when a numbered migration changes a table.
@@ -112,11 +112,38 @@ create table if not exists promotion_codes (
   created_at timestamptz not null,
   updated_at timestamptz not null,
   code varchar(40) not null,
-  amount_off numeric(12, 2) not null,
+  discount_type varchar(10) not null default 'FIXED',
+  amount_off numeric(12, 2),
+  percent_off numeric(5, 2),
+  min_purchase_amount numeric(12, 2) not null default 0,
   active boolean not null default true,
-  constraint promotion_codes_amount_check check (amount_off > 0)
+  deleted_at timestamptz,
+  constraint promotion_codes_discount_check check (
+    (
+      discount_type = 'FIXED'
+      and amount_off is not null
+      and amount_off > 0
+      and percent_off is null
+    )
+    or (
+      discount_type = 'PERCENT'
+      and percent_off is not null
+      and percent_off > 0
+      and percent_off <= 100
+      and amount_off is null
+    )
+  ),
+  constraint promotion_codes_min_purchase_check check (min_purchase_amount >= 0)
 );
-create unique index if not exists promotion_codes_code_key on promotion_codes (upper(code));
+create unique index if not exists promotion_codes_code_key
+  on promotion_codes (upper(code))
+  where deleted_at is null;
+
+create table if not exists promotion_code_room_types (
+  promotion_code_id uuid not null references promotion_codes (id) on delete cascade,
+  room_type_id uuid not null references room_types (id) on delete restrict,
+  primary key (promotion_code_id, room_type_id)
+);
 
 create table if not exists bookings (
   id uuid primary key default gen_random_uuid(),

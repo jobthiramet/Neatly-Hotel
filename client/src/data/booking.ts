@@ -101,6 +101,12 @@ export function nightsBetween(start: DateValue, end: DateValue) {
   )
 }
 
+/** Addon line shown to the guest, e.g. "Baby cot - 6 Nights". */
+export function addonLineLabel(label: string, nights: number) {
+  const stay = nights === 1 ? '1 Night' : `${nights} Nights`
+  return `${label} - ${stay}`
+}
+
 export interface UserBooking {
   id: string
   roomName: string

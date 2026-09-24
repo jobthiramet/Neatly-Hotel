@@ -118,6 +118,24 @@ class HotelApplicationTests {
 	}
 
 	@Test
+	void promotionCodesRequireAgent() throws Exception {
+		mockMvc.perform(get("/api/promotion-codes")).andExpect(status().isUnauthorized());
+		when(profileService.findByClerkUserId("user_customer")).thenReturn(profile("user_customer", "user"));
+		mockMvc.perform(get("/api/promotion-codes").with(jwt().jwt(token -> token.subject("user_customer"))))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void agentCanListSeededPromotionCode() throws Exception {
+		when(profileService.findByClerkUserId("user_agent")).thenReturn(profile("user_agent", "agent"));
+		mockMvc.perform(get("/api/promotion-codes").with(jwt().jwt(token -> token.subject("user_agent"))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data[0].code").value("NEATLYNEW400"))
+				.andExpect(jsonPath("$.data[0].discountType").value("FIXED"))
+				.andExpect(jsonPath("$.data[0].minPurchaseAmount").value(0));
+	}
+
+	@Test
 	void bookingsRequireAuthentication() throws Exception {
 		mockMvc.perform(get("/api/bookings")).andExpect(status().isUnauthorized());
 		mockMvc.perform(post("/api/bookings").contentType(MediaType.APPLICATION_JSON).content("{}"))

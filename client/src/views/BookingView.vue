@@ -31,6 +31,7 @@ import type { BasicInfoField, CheckoutPayment, GuestDetails } from '@/data/booki
 import {
   BOOKING_HOLD_SECONDS,
   CHECKOUT_STEPS,
+  addonLineLabel,
   nightsBetween,
   promotionDiscount,
   specialRequests,
@@ -162,7 +163,7 @@ const roomAmount = computed(() => roomPrice.value * nights.value * rooms.value)
 const extraItems = computed(() =>
   specialRequests
     .filter(item => selectedRequestIds.value.includes(item.id))
-    .map(item => ({ label: item.label, amount: item.price })),
+    .map(item => ({ label: addonLineLabel(item.label, nights.value), amount: item.price * nights.value })),
 )
 const promotionAmount = computed(() => promotionDiscount(payment.promotionCode))
 const lineItems = computed(() => {

@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel` and `PUT /api/hotel/logo` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel`, `PUT /api/hotel/logo`, and every `/api/promotion-codes/**` endpoint additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -359,6 +359,59 @@ Soft-delete a unit.
 - Response `204`: empty body
 - Errors: `404`
 
+### Promotion codes
+
+Admin Promo code page. Codes are **soft deleted**: `DELETE` sets `deletedAt` and hides the row from the list. Past bookings keep the foreign key. A code applies at checkout only when it is active, not deleted, the pre-discount total (room subtotal + extras) is at least `minPurchaseAmount`, and the booked room type is in `roomTypes` (an empty list means every room type). `FIXED` subtracts `amountOff` baht. `PERCENT` subtracts `percentOff` percent of that same total, rounded half up to 2 decimals. The grand total is never negative.
+
+`PromotionCodeRequest`:
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `code` | string | yes | 1–40 characters, letters, numbers, and hyphens; stored uppercase; unique among non-deleted codes |
+| `discountType` | enum | yes | `FIXED` or `PERCENT` |
+| `amountOff` | number \| null | when `FIXED` | > 0, ≤ 2 decimals. Omit or send null for `PERCENT` |
+| `percentOff` | number \| null | when `PERCENT` | > 0 and ≤ 100, ≤ 2 decimals. Omit or send null for `FIXED` |
+| `minPurchaseAmount` | number | yes | ≥ 0, ≤ 2 decimals. Compared with room subtotal + extras |
+| `roomTypeIds` | UUID[] | no | max 50; each id must be a non-deleted room type. Empty or omitted means every room type |
+
+`PromotionCodeResponse`: `id`, `code`, `discountType`, `amountOff` (null for percent), `percentOff` (null for fixed), `minPurchaseAmount`, `roomTypes` (`{ id, name }[]`; empty means every room type). Deleted room types are omitted from `roomTypes`.
+
+#### `GET /api/promotion-codes`
+
+List non-deleted codes, sorted by `code`.
+
+- Auth: Clerk session token and `role = agent`
+- Response `200`: `ApiResponse<PromotionCodeResponse[]>`
+- Errors: `401`; `403`
+
+#### `GET /api/promotion-codes/{id}`
+
+- Auth: Clerk session token and `role = agent`
+- Response `200`: `ApiResponse<PromotionCodeResponse>`
+- Errors: `401`; `403`; `404`
+
+#### `POST /api/promotion-codes`
+
+- Auth: Clerk session token and `role = agent`
+- Body: `PromotionCodeRequest`
+- Response `201`: `ApiResponse<PromotionCodeResponse>` with `message: "Promo code created"`
+- Errors: `400` validation, missing amount for the selected type, or unknown room type; `401`; `403`; `409` duplicate code
+
+#### `PUT /api/promotion-codes/{id}`
+
+- Auth: Clerk session token and `role = agent`
+- Body: `PromotionCodeRequest`
+- Response `200`: `ApiResponse<PromotionCodeResponse>` with `message: "Promo code updated"`
+- Errors: `400`; `401`; `403`; `404`; `409`
+
+#### `DELETE /api/promotion-codes/{id}`
+
+Soft-delete a code.
+
+- Auth: Clerk session token and `role = agent`
+- Response `204`: empty body
+- Errors: `401`; `403`; `404`
+
 ### Hotel information
 
 Single record for the hotel, shown on the Home `#about` section and edited in admin / hotel information.
@@ -568,7 +621,7 @@ Upload or replace the signed-in user's profile picture. The server derives the C
 
 Guest checkout for a signed-in Clerk user. Prices, extras, and promo discounts are calculated on the server from `room_types` and `promotion_codes`. Inventory is the room type's bookable `room_units` (not deleted, status not `OUT_OF_ORDER`/`OUT_OF_SERVICE`, same rule as `GET /api/rooms/available`) minus overlapping `booking_rooms` in `PENDING_PAYMENT`, `CONFIRMED`, or `CHECKED_IN` (expired Stripe drafts do not occupy a unit). Checkout inserts one `booking_rooms` row per requested room with `room_unit_id` null; a physical unit is assigned later. Money is THB `numeric(12,2)`; Stripe amounts are that value × 100.
 
-Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Element). Do not send PAN/CVC to this API.
+Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Element). The session accepts cards only; PromptPay and other non-card methods are excluded. Do not send PAN/CVC to this API.
 
 `CreateBookingRequest`:
 
@@ -586,14 +639,14 @@ Card payments use Stripe Checkout Sessions with `ui_mode: elements` (Payment Ele
 | `country` | string | yes | not blank; max 100 |
 | `dateOfBirth` | date | yes | in the past; guest must be at least 18 |
 | `standardRequestCodes` | string[] | no | known preference codes (e.g. `early-check-in`) |
-| `specialRequestCodes` | string[] | no | known paid extras (e.g. `baby-cot`) |
+| `specialRequestCodes` | string[] | no | known paid extras (e.g. `baby-cot`). Each extra is its catalog price × nights (same night count as the room). |
 | `additionalRequest` | string | no | max 2000 |
-| `promotionCode` | string | no | max 40; unknown or inactive codes are ignored |
+| `promotionCode` | string | no | max 40; ignored when unknown, inactive, deleted, below the code's minimum purchase, or not valid for the booked room type |
 | `paymentMethod` | enum | yes | `STRIPE` or `CASH` |
 
 `BookingResponse` (selected fields): `id`, `bookingNumber`, `roomTypeId`, `roomName`, `roomImageUrl`, `checkIn`, `checkOut`, `checkInTimeText`, `checkOutTimeText`, `guests`, `nights`, `roomsCount`, `status` (`PENDING_PAYMENT`, `CONFIRMED`, `CHECKED_IN`, `CHECKED_OUT`, `COMPLETED`, `CANCELLED`, `EXPIRED`), `paymentMethod`, guest fields, `standardRequests` (`{ code, label }[]`), `additionalRequest`, `promotionCode`, `currency` (`THB`), `items` (`kind` `ROOM` \| `ADDON` \| `DISCOUNT`), `roomSubtotal`, `extrasTotal`, `discountTotal`, `grandTotal`, `paymentMethodText`, `clientSecret` (Stripe Checkout client secret while a card payment is still pending; otherwise `null`), `holdExpiresAt`, `cancelledAt`, `createdAt`, `updatedAt`.
 
-Seeded promo: `NEATLYNEW400` (THB 400 off) from `011_bookings_checkout.sql` / `local_promotion_seed.sql`.
+Seeded promo: `NEATLYNEW400` (fixed THB 400 off, no minimum, every room type) from `011_bookings_checkout.sql` / `local_promotion_seed.sql`. A percent code discounts the pre-discount total (room + extras). A fixed amount is subtracted the same way and the grand total is floored at zero. See Promotion codes.
 
 #### `POST /api/bookings`
 
@@ -684,6 +737,9 @@ Newest first. Mark breaking changes with **BREAKING**.
 ### 2026-09-24
 
 - Added agent-only `GET /api/admin/analytics?from&to` for the admin dashboard, including booking and revenue trends, summary comparisons, guest/payment breakdowns and current room availability.
+- Added agent-only `GET/POST/PUT/DELETE /api/promotion-codes` for the admin Promo code page. Codes can be a fixed THB amount or a percent of the pre-discount total (room + extras), with a minimum purchase and an optional room-type limit (empty `roomTypeIds` means every room type). `DELETE` sets `deletedAt`. Checkout ignores a code that is deleted, below its minimum, or not valid for the booked room type. Run `012_promotion_code_rules.sql` on Supabase before using the supabase profile.
+- Paid extras on `POST /api/bookings` (`specialRequestCodes`) are charged per night: line amount is the catalog price × nights. A 7-night baby cot is THB 2,800. One-night totals are unchanged.
+- Stripe Checkout Sessions accept cards only. PromptPay and other non-card methods are excluded from the Payment Element.
 
 ### 2026-09-23
 
