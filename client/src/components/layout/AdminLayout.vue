@@ -22,7 +22,7 @@ const navItems: { label: string, icon: Component, routeName?: string }[] = [
   { label: 'Room Management', icon: IconRoomManagement, routeName: 'admin-room-management' },
   { label: 'Hotel Information', icon: IconHotel, routeName: 'admin-hotel-information' },
   { label: 'Room & Property', icon: IconCube, routeName: 'admin-rooms' },
-  { label: 'Analytics Dashboard', icon: IconChartPie },
+  { label: 'Analytics Dashboard', icon: IconChartPie, routeName: 'admin-analytics-dashboard' },
   { label: 'Chatbot Setup', icon: IconChatText, routeName: 'admin-chatbot-setup' },
 ]
 

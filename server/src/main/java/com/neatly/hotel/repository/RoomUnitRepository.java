@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.neatly.hotel.model.RoomUnit;
 
@@ -20,4 +22,10 @@ public interface RoomUnitRepository extends JpaRepository<RoomUnit, UUID> {
 	boolean existsByRoomNumber(String roomNumber);
 
 	boolean existsByRoomNumberAndIdNot(String roomNumber, UUID id);
+
+	@Query("""
+			select count(u) from RoomUnit u
+			where u.deletedAt is null and u.roomStatus.code not in :blockedStatuses
+			""")
+	long countBookable(@Param("blockedStatuses") List<String> blockedStatuses);
 }

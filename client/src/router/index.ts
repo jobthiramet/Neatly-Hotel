@@ -134,6 +134,12 @@ const router = createRouter({
           component: () => import('../views/admin/ChatbotSetupView.vue'),
           meta: { title: 'Chatbot Setup' },
         },
+        {
+          path: 'dashboard',
+          name: 'admin-analytics-dashboard',
+          component: () => import('../views/admin/AnalyticsDashboardView.vue'),
+          meta: { title: 'Analytics Dashboard' },
+        },
       ],
     },
     {

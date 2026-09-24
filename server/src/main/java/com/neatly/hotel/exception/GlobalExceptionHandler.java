@@ -13,6 +13,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -35,7 +36,10 @@ public class GlobalExceptionHandler {
 		return build(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), details);
 	}
 
-	@ExceptionHandler({ HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class })
+	@ExceptionHandler({
+			HttpMessageNotReadableException.class,
+			MethodArgumentTypeMismatchException.class,
+			MissingServletRequestParameterException.class })
 	public ResponseEntity<ErrorResponse> handleUnreadable(Exception ex, HttpServletRequest request) {
 		return build(HttpStatus.BAD_REQUEST, "Malformed request", request.getRequestURI(), List.of());
 	}
