@@ -27,6 +27,43 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 	List<Booking> findByUserIdAndStatus(String userId, BookingStatus status);
 
 	@Query("""
+			select b from Booking b
+			where b.status in :statuses
+			  and b.createdAt >= :from
+			  and b.createdAt < :to
+			order by b.createdAt
+			""")
+	List<Booking> findAnalyticsBookings(
+			@Param("statuses") List<BookingStatus> statuses,
+			@Param("from") Instant from,
+			@Param("to") Instant to);
+
+	@Query("""
+			select distinct b.userId from Booking b
+			where b.status in :statuses and b.createdAt < :before
+			""")
+	List<String> findDistinctUserIdsBefore(
+			@Param("statuses") List<BookingStatus> statuses,
+			@Param("before") Instant before);
+
+	@Query("""
+			select count(r) from BookingRoom r join r.booking b
+			where b.status = :status and b.checkIn <= :date and b.checkOut > :date
+			""")
+	long countOccupiedRooms(@Param("date") LocalDate date, @Param("status") BookingStatus status);
+
+	@Query("""
+			select count(r) from BookingRoom r join r.booking b
+			where b.status in :statuses and b.checkIn <= :date and b.checkOut > :date
+			  and (b.status <> com.neatly.hotel.model.BookingStatus.PENDING_PAYMENT
+			       or b.holdExpiresAt is null or b.holdExpiresAt > :now)
+			""")
+	long countBookedRooms(
+			@Param("date") LocalDate date,
+			@Param("now") Instant now,
+			@Param("statuses") List<BookingStatus> statuses);
+
+	@Query("""
 			select count(r) from BookingRoom r
 			join r.booking b
 			where r.roomType.id = :roomTypeId

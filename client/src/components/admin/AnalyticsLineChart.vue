@@ -6,16 +6,20 @@ const props = withDefaults(defineProps<{
   values: number[]
   max: number
   step: number
+  empty?: boolean
+  revenue?: boolean
   valuePrefix?: string
   valueSuffix?: string
 }>(), {
   valuePrefix: '',
   valueSuffix: '',
+  empty: false,
+  revenue: false,
 })
 
-const width = 800
-const height = 260
-const left = 62
+const width = props.revenue ? 1000 : 800
+const height = props.revenue ? 320 : 260
+const left = props.revenue ? 70 : 62
 const right = 14
 const top = 18
 const bottom = 42
@@ -23,17 +27,24 @@ const plotWidth = width - left - right
 const plotHeight = height - top - bottom
 const activeIndex = ref<number | null>(null)
 const gradientId = useId()
+const chartMax = computed(() => Math.max(props.max, 1))
+const chartStep = computed(() => Math.max(props.step, 1))
 
-const points = computed(() => props.values.map((value, index) => ({
-  x: left + (index * plotWidth) / Math.max(props.values.length - 1, 1),
-  y: top + plotHeight - (value / props.max) * plotHeight,
+const points = computed(() => (props.empty ? [] : props.values).map((value, index) => ({
+  x: left + (props.values.length === 1 ? plotWidth / 2 : (index * plotWidth) / (props.values.length - 1)),
+  y: top + plotHeight - (value / chartMax.value) * plotHeight,
   value,
   label: props.labels[index],
 })))
 
-const polyline = computed(() => points.value.map(point => `${point.x},${point.y}`).join(' '))
-const area = computed(() => `${left},${top + plotHeight} ${polyline.value} ${left + plotWidth},${top + plotHeight}`)
-const ticks = computed(() => Array.from({ length: Math.floor(props.max / props.step) + 1 }, (_, index) => index * props.step))
+const curve = computed(() => points.value.map((point, index) => {
+  const previous = points.value[index - 1]
+  if (!previous) return `M ${point.x},${point.y}`
+  const middle = (previous.x + point.x) / 2
+  return `C ${middle},${previous.y} ${middle},${point.y} ${point.x},${point.y}`
+}).join(' '))
+const area = computed(() => `${curve.value} L ${points.value.at(-1)?.x ?? left},${top + plotHeight} L ${left},${top + plotHeight} Z`)
+const ticks = computed(() => Array.from({ length: Math.floor(chartMax.value / chartStep.value) + 1 }, (_, index) => index * chartStep.value))
 const activePoint = computed(() => activeIndex.value === null ? null : points.value[activeIndex.value])
 
 function activateNearest(event: MouseEvent) {
@@ -55,7 +66,7 @@ function formatValue(value: number) {
   <div class="relative w-full" @mouseleave="activeIndex = null">
     <svg
       class="block w-full overflow-visible text-gray-600"
-      viewBox="0 0 800 260"
+      :viewBox="`0 0 ${width} ${height}`"
       role="img"
       aria-label="Line chart"
       @mousemove="activateNearest"
@@ -71,26 +82,36 @@ function formatValue(value: number) {
         <line
           :x1="left"
           :x2="left + plotWidth"
-          :y1="top + plotHeight - (tick / max) * plotHeight"
-          :y2="top + plotHeight - (tick / max) * plotHeight"
+          :y1="top + plotHeight - (tick / chartMax) * plotHeight"
+          :y2="top + plotHeight - (tick / chartMax) * plotHeight"
           stroke="var(--color-gray-300)"
           stroke-width="1"
         />
         <text
           :x="left - 12"
-          :y="top + plotHeight - (tick / max) * plotHeight + 4"
+          :y="top + plotHeight - (tick / chartMax) * plotHeight + 4"
           text-anchor="end"
           fill="currentColor"
-          class="text-body3"
+          :class="revenue ? 'text-body2' : 'text-body3'"
         >{{ formatValue(tick) }}</text>
       </g>
 
-      <polygon :points="area" :fill="`url(#${gradientId})`" />
-      <polyline :points="polyline" fill="none" stroke="var(--color-orange-500)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+      <path v-if="points.length" :d="area" :fill="`url(#${gradientId})`" />
+      <path v-if="points.length > 1" :d="curve" fill="none" stroke="var(--color-orange-500)" :stroke-width="revenue ? 2.5 : 3" stroke-linecap="round" stroke-linejoin="round" />
+
+      <text
+        v-for="(label, index) in labels"
+        :key="`${index}-${label}`"
+        v-show="index % Math.max(Math.ceil(labels.length / 7), 1) === 0 || index === labels.length - 1"
+        :x="left + (labels.length === 1 ? plotWidth / 2 : (index * plotWidth) / (labels.length - 1))"
+        :y="height - 10"
+        text-anchor="middle"
+        fill="currentColor"
+        :class="revenue ? 'text-body2' : 'text-body3'"
+      >{{ label }}</text>
 
       <g v-for="(point, index) in points" :key="point.label">
-        <circle :cx="point.x" :cy="point.y" r="4" fill="var(--color-white)" stroke="var(--color-orange-500)" stroke-width="3" />
-        <text :x="point.x" :y="height - 10" text-anchor="middle" fill="currentColor" class="text-body3">{{ point.label }}</text>
+        <circle :cx="point.x" :cy="point.y" r="4" fill="var(--color-white)" stroke="var(--color-orange-500)" :stroke-width="revenue ? 2.5 : 3" />
         <circle :cx="point.x" :cy="point.y" r="15" fill="transparent" tabindex="0" @focus="activeIndex = index" @blur="activeIndex = null" />
       </g>
     </svg>

@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `PUT /api/hotel` and `PUT /api/hotel/logo` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel` and `PUT /api/hotel/logo` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -58,7 +58,7 @@ Every endpoint except `GET /api/health` wraps its payload:
 | 413 | Uploaded file too large |
 | 429 | Rate limit exceeded (see `Retry-After` header) |
 | 401 | Missing or invalid Clerk session token on a protected endpoint |
-| 403 | Authenticated account has no profile or its role is not `agent` on a hotel write endpoint |
+| 403 | Authenticated account has no profile or its role is not `agent` on an agent-only endpoint |
 | 500 | Unexpected error. **Currently also returned for malformed JSON and invalid UUID path params.** |
 | 502 | Upstream storage (Supabase) request failed |
 | 503 | Storage not configured, or Stripe secret / webhook signing secret missing |
@@ -442,6 +442,60 @@ Upload a new logo and replace the old one. The server stores it as `logo/<uuid>.
 | 502 | `Failed to upload file to storage` |
 | 503 | `Storage is not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY` |
 
+### Admin analytics
+
+#### `GET /api/admin/analytics`
+
+Returns the real booking, revenue, guest, payment and current room-availability data used by the admin dashboard.
+
+- Auth: Clerk session token and database profile with role `agent`
+- Query parameters:
+
+| Field | Type | Required | Rules |
+| --- | --- | --- | --- |
+| `from` | date | yes | inclusive; must be on or before `to` |
+| `to` | date | yes | inclusive; must not be after today in `Asia/Bangkok` |
+
+The range may contain at most 366 days. A range of 31 days or fewer is grouped by day; longer ranges are grouped by month. Summary changes compare against the immediately preceding range with the same number of days. `changePercent` is `null` when the previous value is zero.
+
+`totalBookings`, `totalSales`, trends, guest mix and payment methods include `CONFIRMED`, `CHECKED_IN`, `CHECKED_OUT` and `COMPLETED` bookings by `createdAt`. Room availability is a current snapshot: `occupied` is `CHECKED_IN`; `booked` is overlapping `CONFIRMED` plus unexpired `PENDING_PAYMENT`; `available` is current bookable units minus both.
+
+- Response `200`: `ApiResponse<AnalyticsResponse>`
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "period": {
+      "from": "2026-09-01",
+      "to": "2026-09-24",
+      "comparisonFrom": "2026-08-08",
+      "comparisonTo": "2026-08-31",
+      "granularity": "DAY"
+    },
+    "summary": {
+      "totalBookings": { "value": 12, "previousValue": 10, "changePercent": 20.0 },
+      "totalSales": { "value": 42000.00, "previousValue": 35000.00, "changePercent": 20.0 },
+      "bookingUsers": { "value": 9, "previousValue": 8, "changePercent": 12.5 }
+    },
+    "roomAvailability": { "occupied": 2, "booked": 3, "available": 5, "totalBookable": 10 },
+    "bookingTrend": [{ "label": "1 Sep", "value": 2 }],
+    "revenueTrend": [{ "label": "1 Sep", "value": 7500.00 }],
+    "guestMix": [
+      { "key": "NEW", "count": 6, "percentage": 66.7 },
+      { "key": "RETURNING", "count": 3, "percentage": 33.3 }
+    ],
+    "paymentMethods": [
+      { "key": "STRIPE", "count": 7, "percentage": 58.3 },
+      { "key": "CASH", "count": 5, "percentage": 41.7 }
+    ]
+  }
+}
+```
+
+- Errors: `400` missing/malformed dates, future `to`, reversed range or range over 366 days; `401` missing/invalid Clerk token; `403` missing profile or non-agent role
+
 ### User profiles
 
 `ProfileResponse`:
@@ -626,6 +680,10 @@ Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
 ## 4. Changelog
 
 Newest first. Mark breaking changes with **BREAKING**.
+
+### 2026-09-24
+
+- Added agent-only `GET /api/admin/analytics?from&to` for the admin dashboard, including booking and revenue trends, summary comparisons, guest/payment breakdowns and current room availability.
 
 ### 2026-09-23
 

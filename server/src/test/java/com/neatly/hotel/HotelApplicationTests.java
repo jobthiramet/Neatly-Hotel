@@ -24,6 +24,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockMultipartFile;
 import com.neatly.hotel.service.ProfileService;
 import com.neatly.hotel.service.HotelInfoService;
+import com.neatly.hotel.service.AnalyticsService;
+import com.neatly.hotel.dto.AnalyticsResponse;
 import com.neatly.hotel.dto.ProfileResponse;
 import com.neatly.hotel.exception.ResourceNotFoundException;
 
@@ -40,6 +42,9 @@ class HotelApplicationTests {
 
 	@MockitoBean
 	private HotelInfoService hotelInfoService;
+
+	@MockitoBean
+	private AnalyticsService analyticsService;
 
 	@Test
 	void contextLoads() {
@@ -117,6 +122,34 @@ class HotelApplicationTests {
 		mockMvc.perform(get("/api/bookings")).andExpect(status().isUnauthorized());
 		mockMvc.perform(post("/api/bookings").contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void analyticsRequiresAgentAndDocumentsSecurity() throws Exception {
+		String path = "/api/admin/analytics?from=2026-09-01&to=2026-09-24";
+		mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
+
+		when(profileService.findByClerkUserId("user_customer")).thenReturn(profile("user_customer", "user"));
+		mockMvc.perform(get(path).with(jwt().jwt(token -> token.subject("user_customer"))))
+				.andExpect(status().isForbidden());
+
+		when(profileService.findByClerkUserId("user_agent")).thenReturn(profile("user_agent", "agent"));
+		when(analyticsService.get(any(), any())).thenReturn(new AnalyticsResponse(
+				new AnalyticsResponse.Period(null, null, null, null, "DAY"),
+				new AnalyticsResponse.Summary(null, null, null),
+				new AnalyticsResponse.RoomAvailability(0, 0, 0, 0),
+				java.util.List.of(), java.util.List.of(), java.util.List.of(), java.util.List.of()));
+		mockMvc.perform(get(path).with(jwt().jwt(token -> token.subject("user_agent"))))
+				.andExpect(status().isOk());
+		mockMvc.perform(get("/api/admin/analytics?from=bad&to=2026-09-24")
+				.with(jwt().jwt(token -> token.subject("user_agent"))))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/api/admin/analytics?from=2026-09-01")
+				.with(jwt().jwt(token -> token.subject("user_agent"))))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.paths['/api/admin/analytics'].get.security[0].clerkBearer").exists())
+				.andExpect(jsonPath("$.paths['/api/admin/analytics'].get.responses['403']").exists());
 	}
 
 	@Test
