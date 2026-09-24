@@ -21,6 +21,7 @@ import com.neatly.hotel.dto.BookingResponse;
 import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
 import com.neatly.hotel.dto.PageResponse;
+import com.neatly.hotel.dto.UpdatePromotionCodeRequest;
 import com.neatly.hotel.service.BookingService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -72,6 +73,15 @@ public class BookingController {
 			@AuthenticationPrincipal Jwt jwt,
 			@PathVariable UUID id) {
 		return ApiResponse.ok(bookingService.retryPayment(jwt.getSubject(), id));
+	}
+
+	@PatchMapping("/{id}/promotion")
+	@Operation(summary = "Change the promotion code on an open card draft", description = "Updates the Checkout Session amount in place. The client secret stays the same, so the card form is not recreated.")
+	public ApiResponse<BookingResponse> updatePromotion(
+			@AuthenticationPrincipal Jwt jwt,
+			@PathVariable UUID id,
+			@Valid @RequestBody UpdatePromotionCodeRequest request) {
+		return ApiResponse.ok("Promotion code updated", bookingService.updatePromotion(jwt.getSubject(), id, request));
 	}
 
 	@PostMapping("/{id}/cancel")

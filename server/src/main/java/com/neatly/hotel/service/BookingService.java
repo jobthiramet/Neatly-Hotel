@@ -8,6 +8,7 @@ import com.neatly.hotel.dto.BookingResponse;
 import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
 import com.neatly.hotel.dto.PageResponse;
+import com.neatly.hotel.dto.UpdatePromotionCodeRequest;
 
 public interface BookingService {
 
@@ -22,6 +23,9 @@ public interface BookingService {
 	BookingResponse cancel(String clerkUserId, UUID bookingId);
 
 	BookingResponse changeDates(String clerkUserId, UUID bookingId, ChangeBookingDatesRequest request);
+
+	/** Reprices an open card draft and updates its Checkout Session. The client secret does not change. */
+	BookingResponse updatePromotion(String clerkUserId, UUID bookingId, UpdatePromotionCodeRequest request);
 
 	void handleStripeEvent(String payload, String signature);
 }

@@ -87,12 +87,23 @@ watch(
 
 onBeforeUnmount(unmountElement)
 
-async function confirmCard() {
+async function confirmCard(beforeConfirm?: () => Promise<void>) {
   if (!checkout)
-    return { ok: false as const, message: 'Card form is not ready yet.' }
+    return { ok: false as const, recoverable: true, message: 'Card form is not ready yet.' }
   const loaded = await checkout.loadActions()
   if (loaded.type === 'error')
     return { ok: false as const, message: loaded.error.message || 'Could not confirm payment.' }
+  if (beforeConfirm) {
+    try {
+      const updated = await loaded.actions.runServerUpdate(beforeConfirm)
+      if (updated.type === 'error')
+        return { ok: false as const, recoverable: true, message: updated.error.message || 'Could not apply the promotion code.' }
+    }
+    catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not apply the promotion code.'
+      return { ok: false as const, recoverable: true, message }
+    }
+  }
   const result = await loaded.actions.confirm({ redirect: 'if_required' })
   if (result.type === 'error')
     return { ok: false as const, message: result.error.message || 'Payment failed.' }

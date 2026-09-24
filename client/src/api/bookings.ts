@@ -133,6 +133,13 @@ export async function cancelBooking(token: string, id: string) {
   return data.data
 }
 
+export async function updateBookingPromotion(token: string, id: string, promotionCode: string) {
+  const { data } = await api.patch<ApiResponse<BookingResponse>>(`/bookings/${id}/promotion`, { promotionCode }, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return data.data
+}
+
 export async function changeBookingDates(
   token: string,
   id: string,

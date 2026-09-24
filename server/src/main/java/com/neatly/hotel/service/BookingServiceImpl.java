@@ -24,6 +24,7 @@ import com.neatly.hotel.dto.BookingResponse;
 import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
 import com.neatly.hotel.dto.PageResponse;
+import com.neatly.hotel.dto.UpdatePromotionCodeRequest;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.exception.ResourceNotFoundException;
 import com.neatly.hotel.model.Booking;
@@ -234,6 +235,33 @@ public class BookingServiceImpl implements BookingService {
 		assertAvailable(booking.getRoomType(), request.checkIn(), request.checkOut(), booking.getRoomsCount(), booking.getId());
 		booking.setCheckIn(request.checkIn());
 		booking.setCheckOut(request.checkOut());
+		return toResponse(bookingRepository.save(booking), null);
+	}
+
+	@Override
+	public BookingResponse updatePromotion(String clerkUserId, UUID bookingId, UpdatePromotionCodeRequest request) {
+		Booking booking = requireMine(clerkUserId, bookingId);
+		if (booking.getStatus() != BookingStatus.PENDING_PAYMENT
+				|| booking.getPaymentMethod() != BookingPaymentMethod.STRIPE) {
+			throw new ApiException("This booking cannot change its promotion code", HttpStatus.BAD_REQUEST);
+		}
+		List<String> addons = booking.getItems().stream()
+				.filter(item -> item.getKind() == BookingItemKind.ADDON)
+				.map(BookingItem::getCode)
+				.toList();
+		price(booking, booking.getRoomType(), addons, request.promotionCode());
+		Payment charge = latestStripeCharge(booking)
+				.orElseThrow(() -> new ApiException("This booking has no card payment", HttpStatus.BAD_REQUEST));
+		String sessionId = charge.getStripeCheckoutSessionId();
+		if (sessionId == null || sessionId.isBlank()) {
+			throw new ApiException("This booking has no card payment", HttpStatus.BAD_REQUEST);
+		}
+		BigDecimal nextTotal = booking.getGrandTotal();
+		boolean amountChanged = charge.getAmount() == null || charge.getAmount().compareTo(nextTotal) != 0;
+		charge.setAmount(nextTotal);
+		if (amountChanged) {
+			stripe.updateSessionAmount(sessionId, booking);
+		}
 		return toResponse(bookingRepository.save(booking), null);
 	}
 

@@ -31,6 +31,7 @@ import org.springframework.http.HttpStatus;
 
 import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
+import com.neatly.hotel.dto.UpdatePromotionCodeRequest;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.model.Booking;
 import com.neatly.hotel.model.BookingPaymentMethod;
@@ -95,6 +96,74 @@ class BookingServiceImplTest {
 		verify(bookingRepository).save(saved.capture());
 		assertEquals(PaymentStatus.UNPAID, saved.getValue().getPayments().get(0).getStatus());
 		assertEquals(1, saved.getValue().getRoomsCount());
+	}
+
+	@Test
+	void updatingPromotionChangesTheTotalOnTheSameCheckoutSession() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		Booking booking = new Booking();
+		UUID bookingId = UUID.randomUUID();
+		booking.setId(bookingId);
+		booking.setUserId("user_abc");
+		booking.setStatus(BookingStatus.PENDING_PAYMENT);
+		booking.setPaymentMethod(BookingPaymentMethod.STRIPE);
+		booking.setCurrency("THB");
+		booking.setGuests(2);
+		booking.setCheckIn(LocalDate.now().plusDays(2));
+		booking.setCheckOut(LocalDate.now().plusDays(3));
+		BookingRoom booked = new BookingRoom();
+		booked.setBooking(booking);
+		booked.setRoomType(roomType);
+		booking.getRooms().add(booked);
+		Payment charge = new Payment();
+		charge.setProvider(PaymentProvider.STRIPE);
+		charge.setKind(PaymentKind.CHARGE);
+		charge.setStatus(PaymentStatus.PENDING);
+		charge.setAmount(new BigDecimal("2500.00"));
+		charge.setStripeCheckoutSessionId("cs_test");
+		booking.getPayments().add(charge);
+		when(bookingRepository.findByIdAndUserId(bookingId, "user_abc")).thenReturn(Optional.of(booking));
+
+		var response = service.updatePromotion("user_abc", bookingId, new UpdatePromotionCodeRequest("NEATLYNEW400"));
+
+		assertEquals(new BigDecimal("2100.00"), response.grandTotal());
+		assertEquals(new BigDecimal("-400.00"), response.discountTotal());
+		assertEquals(new BigDecimal("2100.00"), charge.getAmount());
+		assertNull(response.clientSecret());
+		verify(stripe).updateSessionAmount("cs_test", booking);
+	}
+
+	@Test
+	void updatingPromotionSkipsStripeWhenTheTotalDoesNotChange() {
+		RoomType roomType = roomType(new BigDecimal("2500.00"), new BigDecimal("2500.00"));
+		Booking booking = new Booking();
+		UUID bookingId = UUID.randomUUID();
+		booking.setId(bookingId);
+		booking.setUserId("user_abc");
+		booking.setStatus(BookingStatus.PENDING_PAYMENT);
+		booking.setPaymentMethod(BookingPaymentMethod.STRIPE);
+		booking.setCurrency("THB");
+		booking.setGuests(2);
+		booking.setCheckIn(LocalDate.now().plusDays(2));
+		booking.setCheckOut(LocalDate.now().plusDays(3));
+		BookingRoom booked = new BookingRoom();
+		booked.setBooking(booking);
+		booked.setRoomType(roomType);
+		booking.getRooms().add(booked);
+		Payment charge = new Payment();
+		charge.setProvider(PaymentProvider.STRIPE);
+		charge.setKind(PaymentKind.CHARGE);
+		charge.setStatus(PaymentStatus.PENDING);
+		charge.setAmount(new BigDecimal("2500.00"));
+		charge.setStripeCheckoutSessionId("cs_test");
+		booking.getPayments().add(charge);
+		when(bookingRepository.findByIdAndUserId(bookingId, "user_abc")).thenReturn(Optional.of(booking));
+
+		var response = service.updatePromotion("user_abc", bookingId, new UpdatePromotionCodeRequest(""));
+
+		assertEquals(new BigDecimal("2500.00"), response.grandTotal());
+		assertNull(response.clientSecret());
+		verify(stripe, never()).updateSessionAmount(any(), any());
 	}
 
 	@Test

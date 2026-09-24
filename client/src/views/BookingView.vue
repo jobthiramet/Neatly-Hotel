@@ -10,7 +10,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { toast } from 'vue-sonner'
 import { api } from '@/api/client'
-import { createBooking, type CreateBookingRequest } from '@/api/bookings'
+import { createBooking, updateBookingPromotion, type CreateBookingRequest } from '@/api/bookings'
 import BookingBasicInfoStep from '@/components/booking/BookingBasicInfoStep.vue'
 import BookingDetailSidebar from '@/components/booking/BookingDetailSidebar.vue'
 import BookingPaymentStep from '@/components/booking/BookingPaymentStep.vue'
@@ -121,9 +121,13 @@ const payment = reactive<CheckoutPayment>({
   cardOwner: '',
   promotionCode: '',
 })
-const paymentStep = ref<{ confirmCard: () => Promise<{ ok: boolean, message?: string }> } | null>(null)
+const paymentStep = ref<{
+  confirmCard: (beforeConfirm?: () => Promise<void>) => Promise<{ ok: boolean, message?: string, recoverable?: boolean }>
+} | null>(null)
 const clientSecret = ref<string | null>(null)
 const pendingBookingId = ref('')
+/** Promotion code already priced into the open Checkout Session. */
+const pricedPromotionCode = ref('')
 const stripeError = ref('')
 const submitting = ref(false)
 
@@ -296,10 +300,12 @@ async function ensureStripeSession() {
   const token = await sessionToken()
   if (!token)
     return
+  const code = payment.promotionCode.trim()
   try {
     stripeError.value = ''
     const booking = await createBooking(token, buildRequest('STRIPE'))
     pendingBookingId.value = booking.id
+    pricedPromotionCode.value = code
     clientSecret.value = booking.clientSecret
   }
   catch (error) {
@@ -314,7 +320,6 @@ watch(
   () => [
     step.value,
     payment.method,
-    payment.promotionCode,
     selectedRequestIds.value.join(','),
     roomTypeId.value,
     dateOfBirth.value?.toString() ?? '',
@@ -325,6 +330,7 @@ watch(
     if (payment.method === 'cash') {
       clientSecret.value = null
       pendingBookingId.value = ''
+      pricedPromotionCode.value = ''
     }
   },
   { immediate: true },
@@ -358,11 +364,22 @@ async function confirmBooking() {
     }
     if (!clientSecret.value)
       await ensureStripeSession()
-    const confirmed = await paymentStep.value?.confirmCard()
+    const code = payment.promotionCode.trim()
+    const syncPromotion = pendingBookingId.value && code !== pricedPromotionCode.value
+      ? async () => {
+          try {
+            await updateBookingPromotion(token, pendingBookingId.value, code)
+            pricedPromotionCode.value = code
+          }
+          catch (error) {
+            throw new Error(apiErrorMessage(error, 'Could not apply the promotion code.'))
+          }
+        }
+      : undefined
+    const confirmed = await paymentStep.value?.confirmCard(syncPromotion)
     if (!confirmed?.ok) {
       const message = confirmed?.message || 'Payment failed.'
-      const formNotReady = /not ready/i.test(message)
-      if (formNotReady || !pendingBookingId.value) {
+      if (confirmed?.recoverable || !pendingBookingId.value) {
         stripeError.value = message
         return
       }

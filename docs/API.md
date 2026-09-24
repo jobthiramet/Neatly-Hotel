@@ -683,6 +683,20 @@ Create a new Stripe Checkout Session for an unpaid card booking (`PENDING_PAYMEN
 - Response `200`: `ApiResponse<BookingResponse>` with a fresh `clientSecret`
 - Errors: `400` not a card booking, or status cannot be paid; `401`; `404`; `409` no remaining units; `502` / `503` Stripe
 
+#### `PATCH /api/bookings/{id}/promotion`
+
+Reprice an open card draft (`PENDING_PAYMENT`, `STRIPE`) and update that Checkout Session's amount. The client secret does not change, so the card form stays filled while the guest edits the code. A blank `promotionCode` removes the discount. Unknown or ineligible codes are ignored, same as checkout.
+
+`UpdatePromotionCodeRequest`:
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `promotionCode` | string | no | max 40; blank clears the code |
+
+- Auth: Clerk session token
+- Response `200`: `ApiResponse<BookingResponse>` with `message: "Promotion code updated"` and `clientSecret: null`
+- Errors: `400` booking is not an open card draft, or it has no Checkout Session; `401`; `404`; `502` / `503` Stripe
+
 #### `POST /api/bookings/{id}/cancel`
 
 Cancel a `CONFIRMED` booking owned by the signed-in user, until check-in at 14:00 `Asia/Bangkok`. `cancelledAt` is set to now. Inventory is released by the existing `booking_rooms` trigger.
@@ -737,6 +751,7 @@ Newest first. Mark breaking changes with **BREAKING**.
 ### 2026-09-24
 
 - Added agent-only `GET /api/admin/analytics?from&to` for the admin dashboard, including booking and revenue trends, summary comparisons, guest/payment breakdowns and current room availability.
+- `PATCH /api/bookings/{id}/promotion` reprices an open card draft and updates the existing Checkout Session amount. The client secret stays the same.
 - Added agent-only `GET/POST/PUT/DELETE /api/promotion-codes` for the admin Promo code page. Codes can be a fixed THB amount or a percent of the pre-discount total (room + extras), with a minimum purchase and an optional room-type limit (empty `roomTypeIds` means every room type). `DELETE` sets `deletedAt`. Checkout ignores a code that is deleted, below its minimum, or not valid for the booked room type. Run `012_promotion_code_rules.sql` on Supabase before using the supabase profile.
 - Paid extras on `POST /api/bookings` (`specialRequestCodes`) are charged per night: line amount is the catalog price × nights. A 7-night baby cot is THB 2,800. One-night totals are unchanged.
 - Stripe Checkout Sessions accept cards only. PromptPay and other non-card methods are excluded from the Payment Element.
