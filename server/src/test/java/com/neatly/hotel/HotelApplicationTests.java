@@ -60,7 +60,7 @@ class HotelApplicationTests {
 
 	@Test
 	void hotelWritesRequireAuthentication() throws Exception {
-		for (String path : new String[] { "/api/hotel", "/api/hotel/logo" }) {
+		for (String path : new String[] { "/api/hotel", "/api/hotel/logo", "/api/chatbot" }) {
 			mockMvc.perform(put(path)).andExpect(status().isUnauthorized());
 			mockMvc.perform(put(path).header("Authorization", "Bearer invalid-token"))
 					.andExpect(status().isUnauthorized());
@@ -71,7 +71,7 @@ class HotelApplicationTests {
 	@Test
 	void tokenRoleCannotOverrideDatabaseUserRole() throws Exception {
 		when(profileService.findByClerkUserId("user_customer")).thenReturn(profile("user_customer", "user"));
-		for (String path : new String[] { "/api/hotel", "/api/hotel/logo" }) {
+		for (String path : new String[] { "/api/hotel", "/api/hotel/logo", "/api/chatbot" }) {
 			mockMvc.perform(put(path).with(jwt().jwt(token -> token.subject("user_customer").claim("role", "agent"))))
 					.andExpect(status().isForbidden());
 		}
@@ -81,7 +81,7 @@ class HotelApplicationTests {
 	@Test
 	void missingProfileCannotWriteHotel() throws Exception {
 		when(profileService.findByClerkUserId("user_missing")).thenThrow(new ResourceNotFoundException("Profile not found"));
-		for (String path : new String[] { "/api/hotel", "/api/hotel/logo" }) {
+		for (String path : new String[] { "/api/hotel", "/api/hotel/logo", "/api/chatbot" }) {
 			mockMvc.perform(put(path).with(jwt().jwt(token -> token.subject("user_missing"))))
 					.andExpect(status().isForbidden());
 		}
@@ -106,6 +106,24 @@ class HotelApplicationTests {
 				.with(jwt().jwt(token -> token.subject("user_agent"))))
 				.andExpect(status().isOk());
 		verify(hotelInfoService).replaceLogo(any());
+	}
+
+	@Test
+	void publicChatbotReadStaysOpenAndAgentCanReplaceIt() throws Exception {
+		mockMvc.perform(get("/api/chatbot")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.topics[?(@.id == 'booking')]").exists());
+
+		when(profileService.findByClerkUserId("user_agent")).thenReturn(profile("user_agent", "agent"));
+		String body = """
+				{"greeting":"Hello guest","autoReply":"Call the desk","topics":[{"id":"hours","label":"Hours","format":"message","text":"From 2 PM"}]}
+				""";
+		mockMvc.perform(put("/api/chatbot").with(jwt().jwt(token -> token.subject("user_agent")))
+				.contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.greeting").value("Hello guest"));
+		mockMvc.perform(get("/api/chatbot"))
+				.andExpect(jsonPath("$.data.greeting").value("Hello guest"))
+				.andExpect(jsonPath("$.data.topics[0].id").value("hours"));
 	}
 
 	@Test

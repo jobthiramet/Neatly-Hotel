@@ -45,6 +45,8 @@ public class SecurityConfig {
 						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
 						.requestMatchers(HttpMethod.PUT, "/api/hotel", "/api/hotel/**")
 						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
+						.requestMatchers(HttpMethod.PUT, "/api/chatbot")
+						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
 						.requestMatchers(HttpMethod.GET, "/api/promotion-codes/preview").permitAll()
 						.requestMatchers("/api/promotion-codes", "/api/promotion-codes/**")
 						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))

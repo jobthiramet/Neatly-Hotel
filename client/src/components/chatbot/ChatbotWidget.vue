@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { useAuth } from '@clerk/vue'
 import { onKeyStroke } from '@vueuse/core'
-import { computed, nextTick, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { IconChat, IconClose } from '@/components/icons'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,9 @@ type ChatMessage
 const BOT_REPLY_DELAY_MS = 200
 
 const chatbot = useChatbotStore()
+onMounted(() => {
+  void chatbot.ensureLoaded()
+})
 const route = useRoute()
 const { isLoaded, isSignedIn } = useAuth()
 const signedIn = computed(() => Boolean(isLoaded.value && isSignedIn.value))

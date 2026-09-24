@@ -1,6 +1,6 @@
 <!-- Figma: (admin) chatbot setup -->
 <script setup lang="ts">
-import { nextTick, reactive, ref } from 'vue'
+import { nextTick, onMounted, reactive, ref } from 'vue'
 import { IconEdit, IconGrip, IconTrash } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
@@ -24,6 +24,13 @@ const FORMAT_LABELS: Record<ChatbotReplyFormat, string> = {
 }
 
 const chatbot = useChatbotStore()
+onMounted(() => {
+  void chatbot.ensureLoaded()
+})
+
+function saveScript() {
+  void chatbot.persist()
+}
 const allRooms = Object.values(roomDetails)
 const dragIndex = ref<number | null>(null)
 const adding = ref(false)
@@ -110,6 +117,7 @@ function changeFormat(topic: ChatbotTopic, format: string) {
   const id = topic.id
   if (format === 'message') {
     chatbot.replaceTopic(id, { id, label, enabled: true, format, text: '' })
+    saveScript()
     return
   }
   if (format === 'room-type') {
@@ -122,6 +130,7 @@ function changeFormat(topic: ChatbotTopic, format: string) {
       actionLabel: 'View Details',
       roomIds: [...chatbotDefaultRoomIds],
     })
+    saveScript()
     return
   }
   chatbot.replaceTopic(id, {
@@ -132,26 +141,31 @@ function changeFormat(topic: ChatbotTopic, format: string) {
     title: '',
     options: [{ label: '', detail: '' }],
   })
+  saveScript()
 }
 
 function addRoom(topic: Extract<ChatbotTopic, { format: 'room-type' }>, roomId: string) {
   if (!roomId || topic.roomIds.includes(roomId))
     return
   topic.roomIds.push(roomId)
+  saveScript()
 }
 
 function removeRoom(topic: Extract<ChatbotTopic, { format: 'room-type' }>, roomId: string) {
   topic.roomIds = topic.roomIds.filter(id => id !== roomId)
+  saveScript()
 }
 
 function addOption(topic: Extract<ChatbotTopic, { format: 'option-with-details' }>) {
   topic.options.push({ label: '', detail: '' })
+  saveScript()
 }
 
 function removeOption(topic: Extract<ChatbotTopic, { format: 'option-with-details' }>, index: number) {
   if (topic.options.length <= 1)
     return
   topic.options.splice(index, 1)
+  saveScript()
 }
 
 function focusTopic(id: string) {
@@ -166,6 +180,7 @@ function onDrop(index: number) {
   if (dragIndex.value !== null)
     chatbot.moveTopic(dragIndex.value, index)
   dragIndex.value = null
+  saveScript()
 }
 
 function onReorderKey(event: KeyboardEvent, index: number) {
@@ -174,9 +189,15 @@ function onReorderKey(event: KeyboardEvent, index: number) {
   event.preventDefault()
   const to = index + (event.key === 'ArrowUp' ? -1 : 1)
   chatbot.moveTopic(index, to)
+  saveScript()
   void nextTick(() => {
     document.getElementById(`reorder-${chatbot.topics[to]?.id}`)?.focus()
   })
+}
+
+function deleteTopic(id: string) {
+  chatbot.removeTopic(id)
+  saveScript()
 }
 
 function startAdd() {
@@ -221,6 +242,7 @@ function saveDraft() {
   if (!topic)
     return
   chatbot.addTopic(topic)
+  saveScript()
   cancelAdd()
 }
 
@@ -232,17 +254,26 @@ function onDraftFormat(format: string) {
 
 <template>
   <div class="flex flex-col gap-10 rounded-sm bg-white px-6 py-10 lg:px-20">
+    <p v-if="chatbot.loading" class="text-body1 text-gray-700" role="status">
+      Loading chatbot script…
+    </p>
+    <p v-if="chatbot.loadError" class="text-body1 text-red" role="alert">
+      {{ chatbot.loadError }} The guest panel is still using the built-in script.
+    </p>
+    <p v-if="chatbot.saveError" class="text-body1 text-red" role="alert">
+      {{ chatbot.saveError }}
+    </p>
     <section class="flex flex-col gap-6" aria-labelledby="default-messages-title">
       <h2 id="default-messages-title" class="text-body1 font-semibold text-gray-600">
         Default Chatbot Messages
       </h2>
 
       <FormField label="Greeting message *" for="chatbot-greeting">
-        <Textarea id="chatbot-greeting" v-model="chatbot.greeting" rows="3" />
+        <Textarea id="chatbot-greeting" v-model="chatbot.greeting" rows="3" @blur="saveScript" />
       </FormField>
 
       <FormField label="Auto-reply message *" for="chatbot-auto-reply">
-        <Textarea id="chatbot-auto-reply" v-model="chatbot.autoReply" rows="3" />
+        <Textarea id="chatbot-auto-reply" v-model="chatbot.autoReply" rows="3" @blur="saveScript" />
       </FormField>
     </section>
 
@@ -265,7 +296,7 @@ function onDraftFormat(format: string) {
       >
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
           <FormField class="lg:flex-1" label="Topic *" :for="`topic-${topic.id}`">
-            <Input :id="`topic-${topic.id}`" v-model="topic.label" />
+            <Input :id="`topic-${topic.id}`" v-model="topic.label" @blur="saveScript" />
           </FormField>
 
           <FormField class="lg:flex-1" label="Reply format" :for="`format-${topic.id}`">
@@ -307,7 +338,7 @@ function onDraftFormat(format: string) {
               class="flex size-8 items-center justify-center text-gray-600 outline-none is-hover:text-red is-focus:ring-2 is-focus:ring-ring disabled:cursor-not-allowed disabled:text-gray-400"
               :disabled="chatbot.topics.length <= 1"
               :aria-label="`Delete ${topic.label}`"
-              @click="chatbot.removeTopic(topic.id)"
+              @click="deleteTopic(topic.id)"
             >
               <IconTrash class="size-5" />
             </button>
@@ -319,12 +350,12 @@ function onDraftFormat(format: string) {
           label="Reply message"
           :for="`text-${topic.id}`"
         >
-          <Textarea :id="`text-${topic.id}`" v-model="topic.text" rows="4" />
+          <Textarea :id="`text-${topic.id}`" v-model="topic.text" rows="4" @blur="saveScript" />
         </FormField>
 
         <template v-else-if="topic.format === 'room-type'">
           <FormField label="Reply title" :for="`title-${topic.id}`">
-            <Input :id="`title-${topic.id}`" v-model="topic.title" />
+            <Input :id="`title-${topic.id}`" v-model="topic.title" @blur="saveScript" />
           </FormField>
 
           <div class="flex flex-col gap-2">
@@ -369,13 +400,13 @@ function onDraftFormat(format: string) {
           </div>
 
           <FormField label="Button name" :for="`action-${topic.id}`">
-            <Input :id="`action-${topic.id}`" v-model="topic.actionLabel" />
+            <Input :id="`action-${topic.id}`" v-model="topic.actionLabel" @blur="saveScript" />
           </FormField>
         </template>
 
         <template v-else>
           <FormField label="Reply title" :for="`title-${topic.id}`">
-            <Input :id="`title-${topic.id}`" v-model="topic.title" />
+            <Input :id="`title-${topic.id}`" v-model="topic.title" @blur="saveScript" />
           </FormField>
 
           <div
@@ -384,11 +415,11 @@ function onDraftFormat(format: string) {
             class="grid gap-4 lg:grid-cols-2"
           >
             <FormField label="Option" :for="`option-${topic.id}-${optionIndex}`">
-              <Input :id="`option-${topic.id}-${optionIndex}`" v-model="option.label" />
+              <Input :id="`option-${topic.id}-${optionIndex}`" v-model="option.label" @blur="saveScript" />
             </FormField>
             <div class="flex items-end gap-2">
               <FormField class="flex-1" label="Details" :for="`detail-${topic.id}-${optionIndex}`">
-                <Input :id="`detail-${topic.id}-${optionIndex}`" v-model="option.detail" />
+                <Input :id="`detail-${topic.id}-${optionIndex}`" v-model="option.detail" @blur="saveScript" />
               </FormField>
               <Button
                 type="button"
