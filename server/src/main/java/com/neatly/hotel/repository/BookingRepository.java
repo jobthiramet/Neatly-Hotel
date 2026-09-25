@@ -22,6 +22,24 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 			List<BookingStatus> statuses,
 			Pageable pageable);
 
+	@Query("""
+			select b from Booking b
+			where b.status in :statuses
+			  and (
+			    :search is null or trim(:search) = ''
+			    or lower(b.guestFirstName) like lower(concat('%', :search, '%'))
+			    or lower(b.guestLastName) like lower(concat('%', :search, '%'))
+			    or lower(concat(b.guestFirstName, ' ', b.guestLastName)) like lower(concat('%', :search, '%'))
+			    or lower(b.roomNameSnapshot) like lower(concat('%', :search, '%'))
+			    or lower(b.bookingNumber) like lower(concat('%', :search, '%'))
+			  )
+			order by b.createdAt desc
+			""")
+	Page<Booking> findAdminBookings(
+			@Param("statuses") List<BookingStatus> statuses,
+			@Param("search") String search,
+			Pageable pageable);
+
 	Optional<Booking> findByIdAndUserId(UUID id, String userId);
 
 	List<Booking> findByUserIdAndStatus(String userId, BookingStatus status);
