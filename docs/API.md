@@ -622,8 +622,23 @@ The range may contain at most 366 days. A range of 31 days or fewer is grouped b
 Get the signed-in user's profile. The server reads the Clerk user ID from the verified token's `sub` claim.
 
 - Auth: Clerk session token (`Authorization: Bearer <token>`)
-- Response `200`: `ApiResponse<ProfileResponse>`
-- Errors: `404` profile not found
+- Response `200`: `ApiResponse<ProfileResponse>`. A guest with no saved profile gets an empty one (every field `null` except `clerkUserId` and `role`); nothing is written until they save.
+- Errors: `401` missing or invalid token
+
+#### `PUT /api/profiles/me`
+
+Update (and, on first save, create) the signed-in user's profile. The Clerk user ID comes from the verified token's `sub`; an id in the body is ignored. Text is trimmed.
+
+- Auth: Clerk session token (`Authorization: Bearer <token>`)
+- Body (`application/json`, `UpdateProfileRequest`): same fields as `CreateProfileRequest`, except `phoneNumber` also accepts a local number (`088 888 8888`), which is stored as E.164 (`+66888888888`). A number without a country code is assumed to be Thai.
+- Response `200`: `ApiResponse<ProfileUpdateResponse>` with `message: "Profile updated"`
+
+```json
+{ "profile": { "clerkUserId": "user_…", "firstName": "Kate", "…": "…" }, "clerkSynced": true }
+```
+
+- **Clerk mirror:** after the database save, the first and last name are sent to Clerk's Backend API (`PATCH /v1/users/{id}`, `CLERK_SECRET_KEY`). `clerkSynced` is `true` on success, `false` when that call failed (**the database save still stands**, and the failure is logged), and `null` when `CLERK_SECRET_KEY` is empty so mirroring is skipped. Phone numbers, email and password are not mirrored: Clerk owns those and they need its own verification flows.
+- Errors: `400` validation failed; `401` missing or invalid token
 
 #### `POST /api/profiles`
 
@@ -814,6 +829,11 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 - `POST /api/bookings/{id}/cancel` sends a best-effort cancellation email to `guestEmail` through Brevo after the booking is saved. The refund amount is included only when a Stripe refund was created. Cash cancellations say no payment was taken. Mail is skipped when `BREVO_API_KEY` or `MAIL_FROM` is empty, and a Brevo failure does not roll back the cancellation.
 - Card refunds stay on the original Stripe charge. Cash bookings are cancelled without a refund.
+
+### 2026-09-25
+
+- Added `PUT /api/profiles/me` (update, creating the profile on first save). Names are mirrored to Clerk's Backend API; `clerkSynced` reports whether that worked. Local phone numbers are normalised to E.164.
+- `GET /api/profiles/me` now returns an empty profile instead of `404` when the guest has not saved one yet.
 
 ### 2026-09-21
 
