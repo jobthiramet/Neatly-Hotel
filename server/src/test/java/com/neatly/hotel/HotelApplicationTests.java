@@ -189,6 +189,30 @@ class HotelApplicationTests {
 	}
 
 	@Test
+	void adminBookingsRequiresAgentAndDocumentsSecurity() throws Exception {
+		String path = "/api/admin/bookings";
+		mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
+
+		when(profileService.findByClerkUserId("user_customer")).thenReturn(profile("user_customer", "user"));
+		mockMvc.perform(get(path).with(jwt().jwt(token -> token.subject("user_customer"))))
+				.andExpect(status().isForbidden());
+
+		when(profileService.findByClerkUserId("user_agent")).thenReturn(profile("user_agent", "agent"));
+		mockMvc.perform(get(path).with(jwt().jwt(token -> token.subject("user_agent"))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.content").isArray());
+
+		mockMvc.perform(get("/api/admin/bookings/00000000-0000-0000-0000-000000000001")
+				.with(jwt().jwt(token -> token.subject("user_agent"))))
+				.andExpect(status().isNotFound());
+
+		mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.paths['/api/admin/bookings'].get.security[0].clerkBearer").exists())
+				.andExpect(jsonPath("$.paths['/api/admin/bookings'].get.responses['403']").exists())
+				.andExpect(jsonPath("$.paths['/api/admin/bookings/{id}'].get.responses['404']").exists());
+	}
+
+	@Test
 	void cashBookingCreatesConfirmedStay() throws Exception {
 		String body = """
 				{

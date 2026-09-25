@@ -43,6 +43,8 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.GET, "/api/admin/analytics")
 						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
+						.requestMatchers(HttpMethod.GET, "/api/admin/bookings", "/api/admin/bookings/**")
+						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
 						.requestMatchers(HttpMethod.PUT, "/api/hotel", "/api/hotel/**")
 						.access((authentication, context) -> new AuthorizationDecision(isAgent(authentication.get(), profileService)))
 						.requestMatchers(HttpMethod.PUT, "/api/chatbot")

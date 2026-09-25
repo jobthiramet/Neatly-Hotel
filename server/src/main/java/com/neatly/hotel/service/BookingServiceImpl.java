@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.neatly.hotel.dto.AdminBookingDetailResponse;
+import com.neatly.hotel.dto.AdminBookingSummaryResponse;
 import com.neatly.hotel.dto.BookingResponse;
 import com.neatly.hotel.dto.ChangeBookingDatesRequest;
 import com.neatly.hotel.dto.CreateBookingRequest;
@@ -183,6 +185,27 @@ public class BookingServiceImpl implements BookingService {
 		return PageResponse.from(
 				bookingRepository.findByUserIdAndStatusInOrderByCreatedAtDesc(clerkUserId, HISTORY, page),
 				booking -> toResponse(booking, null));
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public PageResponse<AdminBookingSummaryResponse> listForAdmin(String search, Pageable pageable) {
+		PageRequest page = PageRequest.of(
+				Math.max(pageable.getPageNumber(), 0),
+				Math.clamp(pageable.getPageSize() == 0 ? 10 : pageable.getPageSize(), 1, 50));
+		String term = search == null ? "" : search.trim();
+		return PageResponse.from(
+				bookingRepository.findAdminBookings(HISTORY, term, page),
+				AdminBookingSummaryResponse::from);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public AdminBookingDetailResponse findForAdmin(UUID bookingId) {
+		Booking booking = bookingRepository.findById(bookingId)
+				.filter(b -> HISTORY.contains(b.getStatus()))
+				.orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + bookingId));
+		return AdminBookingDetailResponse.from(booking, objectMapper);
 	}
 
 	@Override
