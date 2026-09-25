@@ -18,6 +18,12 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('../views/ProfileView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/booking-history',
       name: 'booking-history',
       component: () => import('../views/BookingHistoryView.vue'),

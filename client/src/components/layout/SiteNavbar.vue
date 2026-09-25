@@ -59,6 +59,18 @@ function onLogoClick(event: MouseEvent) {
           </a>
         </li>
         <li>
+          <Show when="signed-in">
+            <RouterLink
+              to="/profile"
+              class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring"
+              active-class="text-orange-500 font-semibold"
+              @click="closeMenu"
+            >
+              Profile
+            </RouterLink>
+          </Show>
+        </li>
+        <li>
           <RouterLink
             to="/booking-history"
             class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring"
