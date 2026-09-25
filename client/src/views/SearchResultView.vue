@@ -85,7 +85,7 @@ function search(query: RoomSearchQuery) {
 
   <main class="min-h-screen bg-bg">
     <section aria-label="Change search" class="bg-white px-4 py-6 shadow-md lg:py-10">
-      <RoomSearchForm :initial="initial" variant="bar" class="mx-auto max-w-250" @search="search" />
+      <RoomSearchForm :initial="initial" variant="bar" class="mx-auto max-w-288" @search="search" />
     </section>
 
     <section aria-label="Search results" aria-live="polite" class="mx-auto max-w-280 px-4 py-10 lg:py-21">
