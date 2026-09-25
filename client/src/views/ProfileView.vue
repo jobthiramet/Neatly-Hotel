@@ -13,11 +13,13 @@ import { FormField } from '@/components/ui/form-field'
 import { ImageUpload } from '@/components/ui/image-upload'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getProfile, updateProfile } from '@/api/profile'
+import { updateProfile } from '@/api/profile'
 import { countries } from '@/data/countries'
+import { useProfileStore } from '@/stores/profile'
 import { apiFieldErrors } from '@/stores/rooms'
 
 const { user } = useUser()
+const profileStore = useProfileStore()
 
 const firstName = ref('')
 const lastName = ref('')
@@ -34,7 +36,7 @@ const errors = ref<Record<string, string>>({})
 const email = computed(() => user.value?.primaryEmailAddress?.emailAddress ?? '')
 const avatarUrl = computed(() => user.value?.hasImage ? user.value.imageUrl : null)
 
-function fill(profile: Awaited<ReturnType<typeof getProfile>>) {
+function fill(profile: NonNullable<typeof profileStore.profile>) {
   firstName.value = profile.firstName ?? user.value?.firstName ?? ''
   lastName.value = profile.lastName ?? user.value?.lastName ?? ''
   phoneNumber.value = profile.phoneNumber ?? ''
@@ -46,7 +48,10 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    fill(await getProfile())
+    const profile = await profileStore.load()
+    if (!profile)
+      throw new Error('profile unavailable')
+    fill(profile)
   }
   catch {
     loadError.value = 'We couldn\'t load your profile. Please try again.'
@@ -86,6 +91,8 @@ async function save() {
       country: country.value,
     })
     fill(result.profile)
+    // Keeps the navbar name in step without another request.
+    profileStore.set(result.profile)
     // A false flag means the profile saved but Clerk still shows the old name.
     if (result.clerkSynced === false)
       toast.warning('Profile saved, but your account details could not be updated.')

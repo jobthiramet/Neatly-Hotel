@@ -1,15 +1,23 @@
 <!-- Figma: nav bar / non user (12:20 desktop, 7410:3826 mobile) + hambergur menu (7431:4779) -->
 <script setup lang="ts">
-import { Show, UserButton } from "@clerk/vue";
+import { Show, useClerk } from "@clerk/vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import UserMenu from "@/components/layout/UserMenu.vue";
 import { Button } from "@/components/ui/button";
 import { onKeyStroke } from "@vueuse/core";
 import { ref, useTemplateRef } from "vue";
-import { IconClose, IconMenu } from "@/components/icons";
+import { IconClose, IconLogout, IconMenu } from "@/components/icons";
 import NeatlyLogo from "@/components/NeatlyLogo.vue";
 import { navLinks } from "@/data/home";
 
 const emit = defineEmits<{ scrollTop: [] }>();
+const clerk = useClerk();
+
+async function signOutFromMenu() {
+  closeMenu();
+  await clerk.value?.signOut({ redirectUrl: "/" });
+}
+
 const route = useRoute();
 const router = useRouter();
 
@@ -59,18 +67,6 @@ function onLogoClick(event: MouseEvent) {
           </a>
         </li>
         <li>
-          <Show when="signed-in">
-            <RouterLink
-              to="/profile"
-              class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring"
-              active-class="text-orange-500 font-semibold"
-              @click="closeMenu"
-            >
-              Profile
-            </RouterLink>
-          </Show>
-        </li>
-        <li>
           <RouterLink
             to="/booking-history"
             class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring"
@@ -86,7 +82,7 @@ function onLogoClick(event: MouseEvent) {
           <Button as-child variant="ghost"><RouterLink to="/sign-in">Log in</RouterLink></Button>
           <Button as-child><RouterLink to="/sign-up">Sign up</RouterLink></Button>
         </Show>
-        <Show when="signed-in"><UserButton /></Show>
+        <Show when="signed-in"><UserMenu /></Show>
       </div>
 
       <button
@@ -119,6 +115,18 @@ function onLogoClick(event: MouseEvent) {
           </a>
         </li>
         <li>
+          <Show when="signed-in">
+            <RouterLink
+              to="/profile"
+              class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring"
+              active-class="text-orange-500 font-semibold"
+              @click="closeMenu"
+            >
+              Profile
+            </RouterLink>
+          </Show>
+        </li>
+        <li>
           <RouterLink
             to="/booking-history"
             class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-focus:ring-2 is-focus:ring-ring"
@@ -139,7 +147,12 @@ function onLogoClick(event: MouseEvent) {
             ><RouterLink to="/sign-up" @click="closeMenu">Sign up</RouterLink></Button
           >
         </Show>
-        <Show when="signed-in"><UserButton /></Show>
+        <Show when="signed-in">
+          <Button variant="ghost" @click="signOutFromMenu">
+            <IconLogout />
+            Log out
+          </Button>
+        </Show>
       </div>
     </div>
   </header>
