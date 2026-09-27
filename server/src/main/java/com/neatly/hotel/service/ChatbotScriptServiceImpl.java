@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.neatly.hotel.dto.AskChatbotResponse;
 import com.neatly.hotel.dto.ChatbotOptionRequest;
 import com.neatly.hotel.dto.ChatbotOptionResponse;
 import com.neatly.hotel.dto.ChatbotScriptResponse;
@@ -53,6 +54,12 @@ public class ChatbotScriptServiceImpl implements ChatbotScriptService {
 		script.setTopics(writeTopics(topics));
 		ChatbotScript saved = repository.saveAndFlush(script);
 		return new ChatbotScriptResponse(saved.getGreeting(), saved.getAutoReply(), topics);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public AskChatbotResponse ask() {
+		return new AskChatbotResponse(find().getAutoReply());
 	}
 
 	private List<ChatbotTopicResponse> normalize(List<ChatbotTopicRequest> topics) {
