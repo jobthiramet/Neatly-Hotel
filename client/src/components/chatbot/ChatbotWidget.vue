@@ -44,6 +44,7 @@ const canSend = computed(() => Boolean(draft.value.trim()))
 const messages = ref<ChatMessage[]>([])
 let nextMessageId = 1
 let replyTimer = 0
+let conversationId = 0
 const allRooms = Object.values(roomDetails)
 const fabButton = useTemplateRef<HTMLButtonElement>('fabButton')
 const closeButton = useTemplateRef<HTMLButtonElement>('closeButton')
@@ -87,19 +88,18 @@ function clearReplyTimer() {
   replyTimer = 0
 }
 
-function enqueueBotReply(reply: () => void) {
+function enqueueBotReply(reply: () => void | Promise<void>) {
   clearReplyTimer()
   const delay = prefersReducedMotion() ? 0 : BOT_REPLY_DELAY_MS
+  const run = () => {
+    replyTimer = 0
+    void Promise.resolve(reply()).finally(() => scrollToLatest())
+  }
   if (delay === 0) {
-    reply()
-    scrollToLatest()
+    run()
     return
   }
-  replyTimer = window.setTimeout(() => {
-    replyTimer = 0
-    reply()
-    scrollToLatest()
-  }, delay)
+  replyTimer = window.setTimeout(run, delay)
 }
 
 function openPanel() {
@@ -203,16 +203,29 @@ function handleSubmit() {
       return
     }
     const topic = chatbot.findTopic(text)
-    if (topic)
+    if (topic) {
       replyToTopic(topic)
-    else {
-      messages.value.push({
-        id: nextMessageId++,
-        role: 'bot',
-        kind: 'message',
-        text: chatbot.autoReply,
-      })
+      return
     }
+    return replyToUnmatched(text, conversationId)
+  })
+}
+
+async function replyToUnmatched(text: string, askedDuring: number) {
+  let reply = chatbot.autoReply
+  try {
+    reply = await chatbot.ask(text)
+  }
+  catch {
+    reply = chatbot.autoReply
+  }
+  if (askedDuring !== conversationId)
+    return
+  messages.value.push({
+    id: nextMessageId++,
+    role: 'bot',
+    kind: 'message',
+    text: reply,
   })
 }
 
@@ -223,12 +236,14 @@ watch(open, (isOpen) => {
 })
 
 watch(() => route.fullPath, () => {
+  conversationId += 1
   messages.value = []
   draft.value = ''
   clearReplyTimer()
 })
 
 onUnmounted(() => {
+  conversationId += 1
   document.body.style.overflow = ''
   clearReplyTimer()
 })

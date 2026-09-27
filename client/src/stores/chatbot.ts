@@ -170,6 +170,14 @@ export const useChatbotStore = defineStore('chatbot', () => {
     topics.value = next
   }
 
+  async function ask(message: string) {
+    const { data } = await api.post<ApiResponse<{ reply: string }>>('/chatbot/ask', { message })
+    const reply = data.data?.reply?.trim()
+    if (!reply)
+      throw new Error('Could not read the chatbot reply.')
+    return reply
+  }
+
   function findTopic(text: string) {
     return findChatbotTopic(topics.value, text)
   }
@@ -187,6 +195,7 @@ export const useChatbotStore = defineStore('chatbot', () => {
     saveError,
     ensureLoaded,
     persist,
+    ask,
     addTopic,
     replaceTopic,
     removeTopic,

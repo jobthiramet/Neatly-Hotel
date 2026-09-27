@@ -1,12 +1,15 @@
 package com.neatly.hotel.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.neatly.hotel.dto.ApiResponse;
+import com.neatly.hotel.dto.AskChatbotRequest;
+import com.neatly.hotel.dto.AskChatbotResponse;
 import com.neatly.hotel.dto.ChatbotScriptResponse;
 import com.neatly.hotel.dto.UpdateChatbotScriptRequest;
 import com.neatly.hotel.service.ChatbotScriptService;
@@ -31,6 +34,12 @@ public class ChatbotScriptController {
 	@Operation(summary = "Get the guest chatbot script", description = "Public. Greeting, auto-reply and suggestion topics.")
 	public ApiResponse<ChatbotScriptResponse> get() {
 		return ApiResponse.ok(chatbotScriptService.get());
+	}
+
+	@PostMapping("/ask")
+	@Operation(summary = "Reply to an unmatched guest message", description = "Public. Returns the stored auto-reply. Does not interpret the message or store the conversation.")
+	public ApiResponse<AskChatbotResponse> ask(@Valid @RequestBody AskChatbotRequest request) {
+		return ApiResponse.ok(chatbotScriptService.ask());
 	}
 
 	@PutMapping
