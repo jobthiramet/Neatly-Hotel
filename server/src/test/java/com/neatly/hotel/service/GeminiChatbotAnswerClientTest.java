@@ -1,6 +1,7 @@
 package com.neatly.hotel.service;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -47,6 +48,23 @@ class GeminiChatbotAnswerClientTest {
 
 		assertTrue(client.isConfigured());
 		assertEquals(Optional.of("The pool closes at 8 PM"), client.answer("Is the pool open?", "Hotel: Neatly"));
+		server.verify();
+	}
+
+	@Test
+	void liteModelOmitsThinkingConfig() {
+		RestClient.Builder builder = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		server.expect(requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent"))
+				.andExpect(content().string(not(containsString("thinkingConfig"))))
+				.andRespond(withSuccess("""
+						{"candidates":[{"content":{"parts":[{"text":"Check-in is from 2:00 PM."}]}}]}
+						""", MediaType.APPLICATION_JSON));
+
+		GeminiChatbotAnswerClient client = new GeminiChatbotAnswerClient(
+				"test-key", "gemini-3.5-flash-lite", builder.build());
+
+		assertEquals(Optional.of("Check-in is from 2:00 PM."), client.answer("What time is check-in?", "Hotel: Neatly"));
 		server.verify();
 	}
 

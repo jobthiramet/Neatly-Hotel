@@ -465,7 +465,7 @@ Replaces greeting, auto-reply and the whole topic list.
 
 Replies to one guest message that did not match a topic label. The client still matches topic labels locally; this endpoint is only the unmatched path.
 
-When `GEMINI_API_KEY` is set, the server asks Gemini (`GEMINI_MODEL`, default `gemini-3.5-flash`) using the hotel name, hotel description, and the stored topic text. Room prices and promotion prices are not sent. The model is told not to book, cancel, change dates, invent prices or availability, or say that QR / PromptPay works at checkout. Checkout stays credit card and cash.
+When `GEMINI_API_KEY` is set, the server asks Gemini (`GEMINI_MODEL`, default `gemini-3.5-flash-lite`) using the hotel name, hotel description, and the stored topic text. Room prices and promotion prices are not sent. The model is told not to book, cancel, change dates, invent prices or availability, or say that QR / PromptPay works at checkout. Checkout stays credit card and cash.
 
 When the key is empty, the call fails, times out, or the model returns no text, `data.reply` is the stored `autoReply`. The message and the conversation are not stored.
 
@@ -835,7 +835,7 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-27
 
-- `POST /api/chatbot/ask` asks Google Gemini when `GEMINI_API_KEY` is set. The reply is grounded on the hotel name, description, and stored topic text, without room prices. An empty key, a failed call, or an empty model reply still returns the stored auto-reply. The endpoint is limited to 10 requests per minute per client IP. The conversation is not stored.
+- `POST /api/chatbot/ask` asks Google Gemini when `GEMINI_API_KEY` is set. The reply is grounded on the hotel name, description, and stored topic text, without room prices. An empty key, a failed call, or an empty model reply still returns the stored auto-reply. The endpoint is limited to 10 requests per minute per client IP. The conversation is not stored. The default model is `gemini-3.5-flash-lite`.
 
 ### 2026-09-24
 

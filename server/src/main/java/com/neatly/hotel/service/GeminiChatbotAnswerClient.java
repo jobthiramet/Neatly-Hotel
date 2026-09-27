@@ -5,7 +5,9 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -29,7 +31,7 @@ public class GeminiChatbotAnswerClient implements ChatbotAnswerClient {
 
 	private static final Logger log = LoggerFactory.getLogger(GeminiChatbotAnswerClient.class);
 	private static final String ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/";
-	private static final String DEFAULT_MODEL = "gemini-3.5-flash";
+	private static final String DEFAULT_MODEL = "gemini-3.5-flash-lite";
 	private static final Pattern MODEL_NAME = Pattern.compile("[A-Za-z0-9._-]+");
 	private static final String RULES = """
 			You are the Neatly Hotel guest assistant.
@@ -49,7 +51,7 @@ public class GeminiChatbotAnswerClient implements ChatbotAnswerClient {
 	@Autowired
 	public GeminiChatbotAnswerClient(
 			@Value("${app.chatbot.gemini.api-key:}") String apiKey,
-			@Value("${app.chatbot.gemini.model:gemini-3.5-flash}") String model,
+			@Value("${app.chatbot.gemini.model:gemini-3.5-flash-lite}") String model,
 			@Value("${app.chatbot.gemini.timeout:8s}") Duration timeout) {
 		this(apiKey, model, restClient(timeout));
 	}
@@ -106,15 +108,18 @@ public class GeminiChatbotAnswerClient implements ChatbotAnswerClient {
 
 	private Map<String, Object> requestBody(String message, String facts) {
 		String instruction = RULES + "\nFacts:\n" + facts;
+		Map<String, Object> generation = new LinkedHashMap<>();
+		generation.put("maxOutputTokens", 1024);
+		generation.put("temperature", 0.2);
+		if (!model.toLowerCase(Locale.ROOT).contains("lite")) {
+			generation.put("thinkingConfig", Map.of("thinkingBudget", 0));
+		}
 		return Map.of(
 				"systemInstruction", Map.of("parts", List.of(Map.of("text", instruction))),
 				"contents", List.of(Map.of(
 						"role", "user",
 						"parts", List.of(Map.of("text", message)))),
-				"generationConfig", Map.of(
-						"maxOutputTokens", 1024,
-						"temperature", 0.2,
-						"thinkingConfig", Map.of("thinkingBudget", 0)));
+				"generationConfig", generation);
 	}
 
 	private Optional<String> readReply(String body) {
