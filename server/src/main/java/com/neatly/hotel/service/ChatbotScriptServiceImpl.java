@@ -3,8 +3,11 @@ package com.neatly.hotel.service;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +21,7 @@ import com.neatly.hotel.dto.ChatbotOptionResponse;
 import com.neatly.hotel.dto.ChatbotScriptResponse;
 import com.neatly.hotel.dto.ChatbotTopicRequest;
 import com.neatly.hotel.dto.ChatbotTopicResponse;
+import com.neatly.hotel.dto.HotelInfoResponse;
 import com.neatly.hotel.dto.UpdateChatbotScriptRequest;
 import com.neatly.hotel.exception.ApiException;
 import com.neatly.hotel.exception.ResourceNotFoundException;
@@ -28,14 +32,22 @@ import com.neatly.hotel.repository.ChatbotScriptRepository;
 @Transactional
 public class ChatbotScriptServiceImpl implements ChatbotScriptService {
 
+	private static final Logger log = LoggerFactory.getLogger(ChatbotScriptServiceImpl.class);
 	private static final TypeReference<List<ChatbotTopicResponse>> TOPICS = new TypeReference<>() {
 	};
 
 	private final ChatbotScriptRepository repository;
+	private final HotelInfoService hotelInfoService;
+	private final ChatbotAnswerClient answerClient;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
-	public ChatbotScriptServiceImpl(ChatbotScriptRepository repository) {
+	public ChatbotScriptServiceImpl(
+			ChatbotScriptRepository repository,
+			HotelInfoService hotelInfoService,
+			ChatbotAnswerClient answerClient) {
 		this.repository = repository;
+		this.hotelInfoService = hotelInfoService;
+		this.answerClient = answerClient;
 	}
 
 	@Override
@@ -58,8 +70,43 @@ public class ChatbotScriptServiceImpl implements ChatbotScriptService {
 
 	@Override
 	@Transactional(readOnly = true)
-	public AskChatbotResponse ask() {
-		return new AskChatbotResponse(find().getAutoReply());
+	public AskChatbotResponse ask(String message) {
+		ChatbotScript script = find();
+		String fallback = script.getAutoReply();
+		if (!answerClient.isConfigured()) {
+			return new AskChatbotResponse(fallback);
+		}
+		try {
+			Optional<String> reply = answerClient.answer(message, facts(script, fallback));
+			if (reply.isPresent() && !reply.get().isBlank()) {
+				return new AskChatbotResponse(reply.get().trim());
+			}
+		} catch (RuntimeException ex) {
+			log.warn("Chatbot model reply failed: {}", ex.getMessage());
+		}
+		return new AskChatbotResponse(fallback);
+	}
+
+	private String facts(ChatbotScript script, String fallback) {
+		HotelInfoResponse hotel = hotelInfoService.get();
+		StringBuilder facts = new StringBuilder();
+		facts.append("Hotel: ").append(hotel.name()).append('\n');
+		facts.append(hotel.description()).append('\n');
+		for (ChatbotTopicResponse topic : readTopics(script.getTopics())) {
+			facts.append('\n').append(topic.label()).append(": ");
+			if ("message".equals(topic.format())) {
+				facts.append(topic.text());
+			} else if ("room-type".equals(topic.format())) {
+				facts.append(topic.title());
+			} else if ("option-with-details".equals(topic.format()) && topic.options() != null) {
+				facts.append(topic.title());
+				for (ChatbotOptionResponse option : topic.options()) {
+					facts.append("\n- ").append(option.label()).append(": ").append(option.detail());
+				}
+			}
+		}
+		facts.append("\n\nFallback when you do not know:\n").append(fallback);
+		return facts.toString();
 	}
 
 	private List<ChatbotTopicResponse> normalize(List<ChatbotTopicRequest> topics) {
