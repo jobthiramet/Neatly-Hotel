@@ -12,6 +12,10 @@ export const api = axios.create({
 api.interceptors.request.use(async (config) => {
   if (config.headers.Authorization)
     return config
+  // Public endpoint. A signed-in guest's token must not turn a failed
+  // Clerk check into a 401 that hides the model reply.
+  if (config.url === '/chatbot/ask')
+    return config
   const token = await window.Clerk?.session?.getToken().catch(() => null)
   if (token)
     config.headers.Authorization = `Bearer ${token}`
