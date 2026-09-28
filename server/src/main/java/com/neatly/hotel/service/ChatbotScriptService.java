@@ -10,6 +10,9 @@ public interface ChatbotScriptService {
 
 	ChatbotScriptResponse replace(UpdateChatbotScriptRequest request);
 
-	/** Stored auto-reply. The guest message is not interpreted. */
-	AskChatbotResponse ask();
+	/**
+	 * Reply for one unmatched guest message. Uses the model when it is configured,
+	 * otherwise the stored auto-reply. The conversation is not stored.
+	 */
+	AskChatbotResponse ask(String message);
 }

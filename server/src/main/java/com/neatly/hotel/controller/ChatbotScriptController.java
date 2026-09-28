@@ -37,9 +37,9 @@ public class ChatbotScriptController {
 	}
 
 	@PostMapping("/ask")
-	@Operation(summary = "Reply to an unmatched guest message", description = "Public. Returns the stored auto-reply. Does not interpret the message or store the conversation.")
+	@Operation(summary = "Reply to an unmatched guest message", description = "Public. Asks Gemini when configured, otherwise returns the stored auto-reply. Does not store the conversation. Rate limited per client IP.")
 	public ApiResponse<AskChatbotResponse> ask(@Valid @RequestBody AskChatbotRequest request) {
-		return ApiResponse.ok(chatbotScriptService.ask());
+		return ApiResponse.ok(chatbotScriptService.ask(request.message()));
 	}
 
 	@PutMapping

@@ -30,7 +30,7 @@ import com.neatly.hotel.dto.AnalyticsResponse;
 import com.neatly.hotel.dto.ProfileResponse;
 import com.neatly.hotel.exception.ResourceNotFoundException;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.chatbot.gemini.api-key=")
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
 class HotelApplicationTests {
