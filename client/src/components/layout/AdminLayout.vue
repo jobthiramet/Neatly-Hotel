@@ -19,7 +19,7 @@ import { MenuLink } from '@/components/ui/menu-link'
 // To enable a tab: add its route under /admin, then set `routeName` here.
 // Items without a routeName are owned by other tasks and render as inert placeholders.
 const navItems: { label: string, icon: Component, routeName?: string }[] = [
-  { label: 'Customer Booking', icon: IconBooking },
+  { label: 'Customer Booking', icon: IconBooking, routeName: 'admin-customer-bookings' },
   { label: 'Room Management', icon: IconRoomManagement, routeName: 'admin-room-management' },
   { label: 'Hotel Information', icon: IconHotel, routeName: 'admin-hotel-information' },
   { label: 'Room & Property', icon: IconCube, routeName: 'admin-rooms' },

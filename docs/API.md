@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `PUT /api/hotel`, `PUT /api/hotel/logo`, `PUT /api/chatbot`, and every `/api/promotion-codes/**` endpoint except `GET /api/promotion-codes/preview` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `GET /api/admin/bookings`, `PUT /api/hotel`, `PUT /api/hotel/logo`, `PUT /api/chatbot`, and every `/api/promotion-codes/**` endpoint except `GET /api/promotion-codes/preview` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -546,6 +546,37 @@ Upload a new logo and replace the old one. The server stores it as `logo/<uuid>.
 | 502 | `Failed to upload file to storage` |
 | 503 | `Storage is not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY` |
 
+### Admin customer bookings
+
+#### `GET /api/admin/bookings`
+
+Paged list for the Admin Customer Booking table. Newest first. Includes `CONFIRMED`, `CHECKED_IN`, `CHECKED_OUT`, `COMPLETED`, and `CANCELLED` (not unpaid drafts or expired holds).
+
+- Auth: Clerk session token and database profile with role `agent`
+- Query parameters:
+
+| Field | Type | Required | Rules |
+| --- | --- | --- | --- |
+| `search` | string | no | case-insensitive match on guest first/last/full name, room type snapshot, or booking number |
+| `page` | integer | no | zero-based; default `0` |
+| `size` | integer | no | default `10`, clamped 1–50 |
+
+`AdminBookingSummaryResponse`: `id`, `customerName`, `guests`, `roomType`, `roomsCount` (Figma **Amount**), `bedType` (`SINGLE` \| `DOUBLE` \| `KING` \| `TWIN` \| null if the booking has no room rows), `checkIn`, `checkOut`.
+
+- Response `200`: `ApiResponse<PageResponse<AdminBookingSummaryResponse>>`
+- Errors: `401`; `403` missing profile or non-agent role
+
+#### `GET /api/admin/bookings/{id}`
+
+Detail for the Admin Customer Booking page.
+
+- Auth: Clerk session token and database profile with role `agent`
+- Response `200`: `ApiResponse<AdminBookingDetailResponse>`
+
+`AdminBookingDetailResponse`: `id`, `customerName`, `guests`, `roomType`, `roomsCount`, `bedType`, `checkIn`, `checkOut`, `nights`, `bookingDate` (ISO instant = `createdAt`), `paymentMethodText`, `currency`, `grandTotal`, `items` (same shape as `BookingResponse.items`: `kind` `ROOM` \| `ADDON` \| `DISCOUNT`, `code`, `label`, `quantity`, `unitPrice`, `amount`), `additionalRequest` (string \| null).
+
+- Errors: `401`; `403`; `404` booking missing or not in admin-visible statuses (`CONFIRMED`, `CHECKED_IN`, `CHECKED_OUT`, `COMPLETED`, `CANCELLED`)
+
 ### Admin analytics
 
 #### `GET /api/admin/analytics`
@@ -800,6 +831,9 @@ Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
 Newest first. Mark breaking changes with **BREAKING**.
 
 ### 2026-09-24
+
+- Added agent-only `GET /api/admin/bookings?search&page&size` for the Admin Customer Booking list (`AdminBookingSummaryResponse`).
+- Added agent-only `GET /api/admin/bookings/{id}` for the Admin Customer Booking detail (`AdminBookingDetailResponse`).
 
 - Added public `GET /api/chatbot` and agent-only `PUT /api/chatbot` for the guest assistant script (greeting, auto-reply and suggestion topics). Run `014_chatbot_script.sql` then `014_chatbot_script_seed.sql` on Supabase before using the supabase profile.
 
