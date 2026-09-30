@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import NeatlyLogo from '@/components/NeatlyLogo.vue'
 import IconFacebook from '@/components/icons/IconFacebook.vue'
 import IconGoogle from '@/components/icons/IconGoogle.vue'
+import IconMenu from '@/components/icons/IconMenu.vue'
 import { navLinks } from '@/data/home'
 import backgroundImage from '@/assets/auth/register-background.jpg'
 
@@ -220,24 +221,27 @@ async function resetPassword() {
 
 <template>
   <div class="min-h-screen bg-bg">
-    <header class="h-25 border-b border-gray-300 bg-white">
-      <nav class="mx-auto flex h-full max-w-288 items-center px-4" aria-label="Main">
-        <RouterLink to="/" class="rounded-sm outline-none is-focus:ring-2 is-focus:ring-ring"><NeatlyLogo class="h-11.25" /></RouterLink>
+    <header class="h-navbar border-b border-gray-300 bg-white lg:h-25">
+      <nav class="mx-auto flex h-full max-w-288 items-center justify-between px-4" aria-label="Main">
+        <RouterLink to="/" class="rounded-sm outline-none is-focus:ring-2 is-focus:ring-ring"><NeatlyLogo class="h-6 lg:h-11.25" /></RouterLink>
         <ul class="ml-17 hidden items-center gap-2 lg:flex">
           <li v-for="link in navLinks" :key="link.href">
             <a :href="`/${link.href}`" class="block rounded-sm px-4 py-6 text-body2 text-gray-900 outline-none is-hover:text-orange-500 is-focus:ring-2 is-focus:ring-ring">{{ link.label }}</a>
           </li>
         </ul>
-        <RouterLink to="/sign-in" class="ml-auto rounded-sm px-4 py-6 text-body2 text-orange-500 outline-none is-focus:ring-2 is-focus:ring-ring">Log in</RouterLink>
+        <RouterLink to="/sign-in" class="ml-auto hidden rounded-sm px-4 py-6 text-body2 text-orange-500 outline-none is-focus:ring-2 is-focus:ring-ring lg:block">Log in</RouterLink>
+        <button type="button" class="rounded-sm p-1 text-gray-700 outline-none is-focus:ring-2 is-focus:ring-ring lg:hidden" aria-label="Open menu">
+          <IconMenu class="size-6" />
+        </button>
       </nav>
     </header>
 
-    <main class="grid min-h-screen lg:grid-cols-2">
-      <div class="hidden bg-cover bg-center lg:block" :style="{ backgroundImage: `url(${backgroundImage})` }" role="img" aria-label="Hotel pool and lounge chairs" />
-      <section class="flex items-start justify-center px-6 py-24 lg:px-20 lg:pt-41">
+    <main class="min-h-screen lg:grid lg:grid-cols-2">
+      <div class="h-67.25 bg-cover bg-center lg:h-auto" :style="{ backgroundImage: `url(${backgroundImage})` }" role="img" aria-label="Hotel pool and lounge chairs" />
+      <section class="flex items-start justify-center px-4 py-10 lg:px-20 lg:pt-41">
         <div class="w-full max-w-113">
           <template v-if="step === 'login'">
-            <h1 class="font-serif text-h2 text-green-800">Log In</h1>
+            <h1 class="font-serif text-h3 text-green-800 lg:text-h2">Log In</h1>
             <div class="mt-8 grid gap-3 sm:grid-cols-2">
               <Button type="button" variant="secondary" class="h-12 w-full gap-3" :disabled="loading || !isLoaded" @click="loginWithSocial('oauth_google')">
                 <IconGoogle class="size-5" />
@@ -248,12 +252,12 @@ async function resetPassword() {
                 Facebook
               </Button>
             </div>
-            <div class="mt-8 flex items-center gap-4 text-body3 text-gray-600" aria-hidden="true">
+            <div class="mt-8 hidden items-center gap-4 text-body3 text-gray-600 lg:flex" aria-hidden="true">
               <span class="h-px flex-1 bg-gray-300" />
               <span>or continue with email</span>
               <span class="h-px flex-1 bg-gray-300" />
             </div>
-            <form class="mt-14" novalidate @submit.prevent="login">
+            <form class="mt-8 lg:mt-14" novalidate @submit.prevent="login">
             <FormField label="Username or Email" for="identifier" :error="errors.identifier">
               <Input id="identifier" v-model="identifier" autocomplete="username" placeholder="Enter your username or email" :aria-invalid="!!errors.identifier" aria-describedby="identifier-error" required @input="validateField('identifier')" @blur="touchField('identifier')" />
             </FormField>
