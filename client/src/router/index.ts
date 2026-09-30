@@ -104,6 +104,19 @@ const router = createRouter({
       redirect: { name: 'admin-hotel-information' },
       children: [
         {
+          path: 'customer-bookings',
+          name: 'admin-customer-bookings',
+          component: () => import('../views/admin/CustomerBookingView.vue'),
+          meta: { title: 'Customer Booking' },
+        },
+        {
+          path: 'customer-bookings/:id',
+          name: 'admin-customer-booking-detail',
+          component: () => import('../views/admin/CustomerBookingDetailView.vue'),
+          props: true,
+          meta: { adminNav: 'admin-customer-bookings' },
+        },
+        {
           path: 'room-management',
           name: 'admin-room-management',
           component: () => import('../views/admin/RoomManagementView.vue'),
