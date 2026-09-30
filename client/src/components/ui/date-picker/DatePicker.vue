@@ -75,7 +75,7 @@ const label = computed(() => value.value
           props.class,
         )"
       >
-        <span>{{ label ?? placeholder }}</span>
+        <span class="min-w-0 truncate">{{ label ?? placeholder }}</span>
         <IconCalendar class="size-6 shrink-0 text-gray-600" />
       </button>
     </PopoverTrigger>

@@ -77,7 +77,7 @@ function onKeydown(event: KeyboardEvent) {
           props.class,
         )"
       >
-        <span class="line-clamp-1">{{ label }}</span>
+        <span class="min-w-0 truncate">{{ label }}</span>
         <IconCaretDown class="pointer-events-none size-5 shrink-0 text-gray-600" />
       </button>
     </PopoverTrigger>

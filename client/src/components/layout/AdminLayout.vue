@@ -54,7 +54,7 @@ async function logout() {
 <template>
   <div class="flex min-h-screen bg-gray-100">
     <aside class="sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-y-auto bg-green-800">
-      <div class="flex flex-col items-center gap-4 pt-6 pb-25">
+      <div class="flex flex-col items-center gap-4 pt-6 pb-6">
         <NeatlyLogo variant="light" class="h-9" />
         <p class="text-body2 text-green-400">
           Admin Panel Control

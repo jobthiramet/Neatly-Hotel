@@ -120,6 +120,10 @@ export const chatbotTopics: ChatbotTopic[] = [
         label: 'Cash',
         detail: 'You can pay at the hotel with cash or cheque. No payment is required until check-in.',
       },
+      {
+        label: 'QR Code',
+        detail: 'You can pay by scanning a QR code, including PromptPay.',
+      },
     ],
   },
   {

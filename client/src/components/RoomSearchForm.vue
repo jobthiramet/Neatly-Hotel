@@ -159,13 +159,13 @@ function submit() {
     aria-label="Search rooms"
     novalidate
     :class="cn(
-      'flex flex-col gap-4 lg:flex-row lg:items-start',
-      variant === 'hero' ? 'rounded-sm bg-white p-4 shadow-md lg:gap-4 lg:p-10 xl:gap-10' : 'lg:gap-4 xl:gap-10',
+      'flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-start lg:gap-4 xl:gap-6',
+      variant === 'hero' ? 'rounded-sm bg-white p-4 shadow-md lg:p-10' : '',
     )"
     @submit.prevent="submit"
   >
     <div class="flex flex-col gap-4 lg:flex-2 lg:flex-row lg:items-start lg:gap-4 xl:gap-6">
-      <FormField label="Check In" for="check-in" :error="errors.checkIn" class="lg:min-w-40">
+      <FormField label="Check In" for="check-in" :error="errors.checkIn" class="lg:min-w-44">
         <DatePicker
           id="check-in"
           v-model="checkIn"
@@ -176,7 +176,7 @@ function submit() {
         />
       </FormField>
       <span aria-hidden="true" class="hidden pt-10 text-body1 text-gray-900 lg:block">-</span>
-      <FormField label="Check Out" for="check-out" :error="errors.checkOut" class="lg:min-w-40">
+      <FormField label="Check Out" for="check-out" :error="errors.checkOut" class="lg:min-w-44">
         <DatePicker
           id="check-out"
           v-model="checkOut"
@@ -189,7 +189,7 @@ function submit() {
       </FormField>
     </div>
 
-    <FormField label="Rooms & Guests" for="occupancy" :error="errors.occupancy" class="lg:min-w-0 lg:flex-1">
+    <FormField label="Rooms & Guests" for="occupancy" :error="errors.occupancy" class="lg:min-w-52 lg:flex-1">
       <Select v-model="occupancy">
         <SelectTrigger id="occupancy">
           <SelectValue />
@@ -202,7 +202,7 @@ function submit() {
       </Select>
     </FormField>
 
-    <FormField label="Room Types" for="room-types" class="lg:min-w-0 lg:flex-1">
+    <FormField label="Room Types" for="room-types" class="lg:min-w-60 lg:flex-1">
       <MultiSelect
         id="room-types"
         v-model="selectedTypes"

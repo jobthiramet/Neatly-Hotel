@@ -14,7 +14,7 @@ Human-readable reference for client and server collaborators. The machine-genera
 - **`local` profile** (default): in-memory H2, seeded hotel information and the six Figma room types (no images), no Supabase credentials. Storage uploads return `503`.
 - **`supabase` profile** (`server/run-supabase.ps1`): Supabase Postgres, plus Supabase Storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 
-**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `GET /api/admin/bookings`, `PUT /api/hotel`, `PUT /api/hotel/logo`, `PUT /api/chatbot`, and every `/api/promotion-codes/**` endpoint except `GET /api/promotion-codes/preview` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/stripe/webhooks` is public and authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
+**Auth:** All `/api/profiles/**` and `/api/bookings/**` endpoints require a Clerk session token in `Authorization: Bearer <token>`. `GET /api/admin/analytics`, `GET /api/admin/bookings`, `GET /api/admin/bookings/{id}`, `PUT /api/hotel`, `PUT /api/hotel/logo`, `PUT /api/chatbot`, and every `/api/promotion-codes/**` endpoint except `GET /api/promotion-codes/preview` additionally require `role = agent` in the database profile matching the verified token's `sub` claim. The Supabase profile is read on each request; token role claims and client-supplied roles do not grant access. `POST /api/chatbot/ask` and `POST /api/stripe/webhooks` are public; the webhook is authenticated by the Stripe-Signature header. Other endpoints remain open. Set `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTY` on the server to enable Clerk JWT verification.
 
 ## 2. Conventions
 
@@ -433,7 +433,7 @@ One row for the guest assistant. Booking and Cancel Booking login buttons stay i
 | Field | Type | Notes |
 | --- | --- | --- |
 | `greeting` | string | first bot message |
-| `autoReply` | string | used when typed text does not match a topic label |
+| `autoReply` | string | stored reply used by `POST /api/chatbot/ask` when Gemini is not configured, the call fails, or the model returns no text |
 | `topics` | array | suggestion topics, in display order |
 
 Each topic is one of:
@@ -460,6 +460,25 @@ Replaces greeting, auto-reply and the whole topic list.
 - Body: `UpdateChatbotScriptRequest` with `greeting`, `autoReply` and a non-empty `topics` array. Topic ids must be unique. Each topic must include the fields for its `format`.
 - Response `200`: `ApiResponse<ChatbotScriptResponse>` with `message: "Chatbot script updated"`
 - Errors: `400` validation; `401`; `403`; `404` when the script row is missing
+
+#### `POST /api/chatbot/ask`
+
+Replies to one guest message that did not match a topic label. The client still matches topic labels locally; this endpoint is only the unmatched path.
+
+When `GEMINI_API_KEY` is set, the server asks Gemini (`GEMINI_MODEL`, default `gemini-3.5-flash-lite`) using the hotel name, hotel description, and the stored topic text. Room prices and promotion prices are not sent. The model is told not to book, cancel, change dates, invent prices or availability, or say that QR / PromptPay works at checkout. Checkout stays credit card and cash.
+
+When the key is empty, the call fails, times out, or the model returns no text, `data.reply` is the stored `autoReply`. The message and the conversation are not stored.
+
+- Auth: none (public)
+- Body: `AskChatbotRequest`
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `message` | string | yes | not blank, max 500 |
+
+- Response `200`: `ApiResponse<AskChatbotResponse>` with `data.reply`
+- Rate limit: **10 requests per minute per client IP** (`app.chatbot.ask-rate-limit.*`). In-memory per server instance; the client IP is the socket address (`X-Forwarded-For` is not trusted). This bucket is separate from the room list limit.
+- Errors: `400` validation; `404` when the script row is missing; `429` rate limit exceeded, with a `Retry-After` header (seconds) and the standard error body
 
 Run `014_chatbot_script.sql` then `014_chatbot_script_seed.sql` on Supabase before using the supabase profile. The local profile loads the seed automatically.
 
@@ -653,8 +672,23 @@ The range may contain at most 366 days. A range of 31 days or fewer is grouped b
 Get the signed-in user's profile. The server reads the Clerk user ID from the verified token's `sub` claim.
 
 - Auth: Clerk session token (`Authorization: Bearer <token>`)
-- Response `200`: `ApiResponse<ProfileResponse>`
-- Errors: `404` profile not found
+- Response `200`: `ApiResponse<ProfileResponse>`. A guest with no saved profile gets an empty one (every field `null` except `clerkUserId` and `role`); nothing is written until they save.
+- Errors: `401` missing or invalid token
+
+#### `PUT /api/profiles/me`
+
+Update (and, on first save, create) the signed-in user's profile. The Clerk user ID comes from the verified token's `sub`; an id in the body is ignored. Text is trimmed.
+
+- Auth: Clerk session token (`Authorization: Bearer <token>`)
+- Body (`application/json`, `UpdateProfileRequest`): same fields as `CreateProfileRequest`, except `phoneNumber` also accepts a local number (`088 888 8888`), which is stored as E.164 (`+66888888888`). A number without a country code is assumed to be Thai.
+- Response `200`: `ApiResponse<ProfileUpdateResponse>` with `message: "Profile updated"`
+
+```json
+{ "profile": { "clerkUserId": "user_…", "firstName": "Kate", "…": "…" }, "clerkSynced": true }
+```
+
+- **Clerk mirror:** after the database save, the first and last name are sent to Clerk's Backend API (`PATCH /v1/users/{id}`, `CLERK_SECRET_KEY`). `clerkSynced` is `true` on success, `false` when that call failed (**the database save still stands**, and the failure is logged), and `null` when `CLERK_SECRET_KEY` is empty so mirroring is skipped. Phone numbers, email and password are not mirrored: Clerk owns those and they need its own verification flows.
+- Errors: `400` validation failed; `401` missing or invalid token
 
 #### `POST /api/profiles`
 
@@ -830,6 +864,10 @@ Local: `stripe listen --forward-to localhost:8080/api/stripe/webhooks`
 
 Newest first. Mark breaking changes with **BREAKING**.
 
+### 2026-09-27
+
+- `POST /api/chatbot/ask` asks Google Gemini when `GEMINI_API_KEY` is set. The reply is grounded on the hotel name, description, and stored topic text, without room prices. An empty key, a failed call, or an empty model reply still returns the stored auto-reply. The endpoint is limited to 10 requests per minute per client IP. The conversation is not stored. The default model is `gemini-3.5-flash-lite`.
+
 ### 2026-09-24
 
 - Added agent-only `GET /api/admin/bookings?search&page&size` for the Admin Customer Booking list (`AdminBookingSummaryResponse`).
@@ -848,6 +886,11 @@ Newest first. Mark breaking changes with **BREAKING**.
 
 - `POST /api/bookings/{id}/cancel` sends a best-effort cancellation email to `guestEmail` through Brevo after the booking is saved. The refund amount is included only when a Stripe refund was created. Cash cancellations say no payment was taken. Mail is skipped when `BREVO_API_KEY` or `MAIL_FROM` is empty, and a Brevo failure does not roll back the cancellation.
 - Card refunds stay on the original Stripe charge. Cash bookings are cancelled without a refund.
+
+### 2026-09-25
+
+- Added `PUT /api/profiles/me` (update, creating the profile on first save). Names are mirrored to Clerk's Backend API; `clerkSynced` reports whether that worked. Local phone numbers are normalised to E.164.
+- `GET /api/profiles/me` now returns an empty profile instead of `404` when the guest has not saved one yet.
 
 ### 2026-09-21
 

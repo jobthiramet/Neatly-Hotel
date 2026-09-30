@@ -22,6 +22,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockMultipartFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neatly.hotel.service.ProfileService;
 import com.neatly.hotel.service.HotelInfoService;
 import com.neatly.hotel.service.AnalyticsService;
@@ -29,7 +30,7 @@ import com.neatly.hotel.dto.AnalyticsResponse;
 import com.neatly.hotel.dto.ProfileResponse;
 import com.neatly.hotel.exception.ResourceNotFoundException;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.chatbot.gemini.api-key=")
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
 class HotelApplicationTests {
@@ -124,6 +125,25 @@ class HotelApplicationTests {
 		mockMvc.perform(get("/api/chatbot"))
 				.andExpect(jsonPath("$.data.greeting").value("Hello guest"))
 				.andExpect(jsonPath("$.data.topics[0].id").value("hours"));
+	}
+
+	@Test
+	void guestCanAskForTheStoredAutoReply() throws Exception {
+		String script = mockMvc.perform(get("/api/chatbot")).andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		String autoReply = new ObjectMapper().readTree(script).path("data").path("autoReply").asText();
+
+		mockMvc.perform(post("/api/chatbot/ask").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"message\":\"Is the pool open late?\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.reply").value(autoReply));
+
+		mockMvc.perform(post("/api/chatbot/ask").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"message\":\"   \"}"))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(post("/api/chatbot/ask").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"message\":\"" + "a".repeat(501) + "\"}"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

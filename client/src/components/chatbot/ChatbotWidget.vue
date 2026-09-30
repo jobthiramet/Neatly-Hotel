@@ -42,8 +42,11 @@ const showFab = ref(true)
 const draft = ref('')
 const canSend = computed(() => Boolean(draft.value.trim()))
 const messages = ref<ChatMessage[]>([])
+const typing = ref(false)
 let nextMessageId = 1
 let replyTimer = 0
+let conversationId = 0
+let typingCount = 0
 const allRooms = Object.values(roomDetails)
 const fabButton = useTemplateRef<HTMLButtonElement>('fabButton')
 const closeButton = useTemplateRef<HTMLButtonElement>('closeButton')
@@ -87,19 +90,34 @@ function clearReplyTimer() {
   replyTimer = 0
 }
 
-function enqueueBotReply(reply: () => void) {
+function beginTyping() {
+  typingCount += 1
+  typing.value = true
+  scrollToLatest()
+}
+
+function endTyping() {
+  typingCount = Math.max(0, typingCount - 1)
+  typing.value = typingCount > 0
+}
+
+function clearTyping() {
+  typingCount = 0
+  typing.value = false
+}
+
+function enqueueBotReply(reply: () => void | Promise<void>) {
   clearReplyTimer()
   const delay = prefersReducedMotion() ? 0 : BOT_REPLY_DELAY_MS
+  const run = () => {
+    replyTimer = 0
+    void Promise.resolve(reply()).finally(() => scrollToLatest())
+  }
   if (delay === 0) {
-    reply()
-    scrollToLatest()
+    run()
     return
   }
-  replyTimer = window.setTimeout(() => {
-    replyTimer = 0
-    reply()
-    scrollToLatest()
-  }, delay)
+  replyTimer = window.setTimeout(run, delay)
 }
 
 function openPanel() {
@@ -203,17 +221,36 @@ function handleSubmit() {
       return
     }
     const topic = chatbot.findTopic(text)
-    if (topic)
+    if (topic) {
       replyToTopic(topic)
-    else {
-      messages.value.push({
-        id: nextMessageId++,
-        role: 'bot',
-        kind: 'message',
-        text: chatbot.autoReply,
-      })
+      return
     }
+    return replyToUnmatched(text, conversationId)
   })
+}
+
+async function replyToUnmatched(text: string, askedDuring: number) {
+  beginTyping()
+  try {
+    let reply = chatbot.autoReply
+    try {
+      reply = await chatbot.ask(text)
+    }
+    catch {
+      reply = chatbot.autoReply
+    }
+    if (askedDuring !== conversationId)
+      return
+    messages.value.push({
+      id: nextMessageId++,
+      role: 'bot',
+      kind: 'message',
+      text: reply,
+    })
+  }
+  finally {
+    endTyping()
+  }
 }
 
 onKeyStroke('Escape', closePanel)
@@ -223,14 +260,18 @@ watch(open, (isOpen) => {
 })
 
 watch(() => route.fullPath, () => {
+  conversationId += 1
   messages.value = []
   draft.value = ''
   clearReplyTimer()
+  clearTyping()
 })
 
 onUnmounted(() => {
+  conversationId += 1
   document.body.style.overflow = ''
   clearReplyTimer()
+  clearTyping()
 })
 </script>
 
@@ -413,6 +454,19 @@ onUnmounted(() => {
               </template>
             </article>
           </TransitionGroup>
+
+          <p
+            v-if="typing"
+            class="flex w-fit items-center gap-1 rounded-sm bg-white px-4 py-3"
+            role="status"
+          >
+            <span class="sr-only">Neatly Assistant is typing</span>
+            <span class="flex items-center gap-1" aria-hidden="true">
+              <span class="size-1.5 rounded-full bg-gray-600 motion-safe:animate-pulse" />
+              <span class="size-1.5 rounded-full bg-gray-600 motion-safe:animate-pulse" />
+              <span class="size-1.5 rounded-full bg-gray-600 motion-safe:animate-pulse" />
+            </span>
+          </p>
 
           <ul class="flex flex-wrap gap-2" aria-label="Suggested topics">
             <li v-for="topic in chatbot.topics" :key="topic.id">
