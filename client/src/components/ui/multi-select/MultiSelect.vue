@@ -73,7 +73,7 @@ function onKeydown(event: KeyboardEvent) {
         type="button"
         :disabled="disabled"
         :class="cn(
-          'flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm border border-input bg-white py-2.75 pr-3.75 pl-2.75 text-left text-body1 tracking-normal whitespace-nowrap text-black transition-colors outline-none is-focus:border-orange-500 is-focus:ring-2 is-focus:ring-ring is-focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-600',
+          'flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm border border-input bg-white py-2.75 pr-2.5 pl-4 text-left text-body1 tracking-normal whitespace-nowrap text-black transition-colors outline-none is-focus:border-orange-500 is-focus:ring-2 is-focus:ring-ring is-focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-600',
           props.class,
         )"
       >
