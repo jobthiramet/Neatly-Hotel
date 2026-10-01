@@ -9,9 +9,10 @@ import siteIcon from '@/assets/icons/site.svg'
 import walletIcon from '@/assets/icons/wallet.svg'
 import type { AnalyticsMetric } from '@/api/analytics'
 import AnalyticsLineChart from '@/components/admin/AnalyticsLineChart.vue'
-import { IconCash, IconCreditCard, IconHotel } from '@/components/icons'
+import { IconCaretDown, IconCash, IconCreditCard, IconHotel } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { rooms } from '@/data/home'
 import { getMockAnalytics, getMockAvailability, getMockCheckTimes, getMockDays, getMockOccupancy, getMockTraffic, mockRoomTypes, mockStart, mockToday } from '@/data/analytics'
@@ -136,26 +137,68 @@ function scaleFor(values: number[], minimum = 70000) {
   return { max: Math.ceil(highest / step) * step, step }
 }
 
-function exportRevenue() {
+type ExportFormat = 'csv' | 'pdf' | 'xlsx'
+
+function exportRevenue(format: ExportFormat) {
   const rows = [['Period', 'Revenue (THB)'], ...revenueTrend.value.labels.map((label, index) => [label, String(revenueTrend.value.values[index] ?? '')])]
-  downloadCsv(rows, `revenue-trend-${revenueFrom.value}-to-${revenueTo.value}.csv`)
+  void exportRows(rows, `revenue-trend-${revenueFrom.value}-to-${revenueTo.value}`, format)
 }
 
-function exportOccupancy() {
+function exportOccupancy(format: ExportFormat) {
   const series = occupancyView.value === 'overall' ? [{ name: 'Overall', ...occupancyTrend.value }] : occupancyRoomTrends.value
   const rows = [['Period', 'Room type', 'Occupancy (%)'], ...series.flatMap(room => room.labels.map((label, index) => [label, room.name, String(room.values[index] ?? '')]))]
-  downloadCsv(rows, `occupancy-${occupancyFrom.value}-to-${occupancyTo.value}.csv`)
+  void exportRows(rows, `occupancy-${occupancyFrom.value}-to-${occupancyTo.value}`, format)
 }
 
-function downloadCsv(rows: string[][], filename: string) {
-  const csv = rows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\n')
-  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
+async function exportRows(rows: string[][], filename: string, format: ExportFormat) {
+  const label = format === 'xlsx' ? 'Excel' : format.toUpperCase()
+  toast.success(`${label} download started`)
+
+  try {
+    if (format === 'csv') {
+      const csv = rows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\n')
+      downloadBlob(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }), `${filename}.csv`)
+      return
+    }
+
+    if (format === 'pdf') {
+      const { jsPDF } = await import('jspdf')
+      const document = new jsPDF()
+      let y = 20
+      document.setFontSize(14)
+      document.text(filename, 14, y)
+      document.setFontSize(10)
+      rows.forEach((row, index) => {
+        const lines = document.splitTextToSize(row.join('  |  '), 180) as string[]
+        if (y + lines.length * 6 > 285) {
+          document.addPage()
+          y = 20
+        }
+        y += index === 0 ? 12 : 7
+        document.text(lines, 14, y)
+        y += (lines.length - 1) * 5
+      })
+      document.save(`${filename}.pdf`)
+      return
+    }
+
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Analytics')
+    XLSX.writeFile(workbook, `${filename}.xlsx`)
+  }
+  catch {
+    toast.error(`Could not download ${label} file`)
+  }
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
   link.download = filename
   link.click()
   URL.revokeObjectURL(url)
-  toast.success('File downloaded successfully')
 }
 </script>
 
@@ -204,7 +247,8 @@ function downloadCsv(rows: string[][], filename: string) {
 
     <section class="rounded-sm border border-gray-300 bg-white p-6 lg:p-10">
       <div class="flex flex-wrap items-center justify-between gap-6"><h2 class="text-h5 text-gray-600">Revenue Trend</h2><div class="flex flex-wrap items-center gap-3">
-        <span class="text-body2 text-gray-600">From</span><DatePicker v-model="revenueFrom" format="compact" class="w-40" :min-value="mockStart" :max-value="revenueTo" /><span class="text-body2 text-gray-600">to</span><DatePicker v-model="revenueTo" format="compact" class="w-40" :min-value="revenueFrom" :max-value="currentDate" /><Button type="button" class="min-w-28" @click="exportRevenue">Export</Button>
+        <span class="text-body2 text-gray-600">From</span><DatePicker v-model="revenueFrom" format="compact" class="w-40" :min-value="mockStart" :max-value="revenueTo" /><span class="text-body2 text-gray-600">to</span><DatePicker v-model="revenueTo" format="compact" class="w-40" :min-value="revenueFrom" :max-value="currentDate" />
+        <DropdownMenu><DropdownMenuTrigger as-child><Button type="button" class="h-12 min-w-28 gap-4 px-6 py-0">Export <IconCaretDown class="-mr-1.5 size-5" /></Button></DropdownMenuTrigger><DropdownMenuContent class="w-(--reka-dropdown-menu-trigger-width) min-w-(--reka-dropdown-menu-trigger-width)"><DropdownMenuItem @select="exportRevenue('csv')">CSV</DropdownMenuItem><DropdownMenuItem @select="exportRevenue('pdf')">PDF</DropdownMenuItem><DropdownMenuItem @select="exportRevenue('xlsx')">Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </div></div>
       <div class="mt-8"><AnalyticsLineChart :labels="revenueTrend.labels" :values="revenueTrend.values" :max="revenueScale.max" :step="revenueScale.step" revenue :empty="!revenueTrend.values.some(value => value > 0)" /></div>
     </section>
@@ -212,7 +256,8 @@ function downloadCsv(rows: string[][], filename: string) {
     <section class="rounded-sm border border-gray-300 bg-white p-6 lg:p-10">
       <div class="flex flex-wrap items-center justify-between gap-6"><h2 class="text-h5 text-gray-600">Occupancy &amp; Guest</h2><div class="flex flex-wrap items-center gap-3">
         <span class="text-body2 text-gray-600">View by</span><Select v-model="occupancyView"><SelectTrigger class="w-36 pr-2.5 pl-4"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="overall">Overall</SelectItem><SelectItem value="room-type">Room type</SelectItem></SelectContent></Select>
-        <DatePicker v-model="occupancyFrom" format="compact" class="w-40" :min-value="mockStart" :max-value="occupancyTo" /><span class="text-body2 text-gray-600">to</span><DatePicker v-model="occupancyTo" format="compact" class="w-40" :min-value="occupancyFrom" :max-value="currentDate" /><Button type="button" class="min-w-28" @click="exportOccupancy">Export</Button>
+        <DatePicker v-model="occupancyFrom" format="compact" class="w-40" :min-value="mockStart" :max-value="occupancyTo" /><span class="text-body2 text-gray-600">to</span><DatePicker v-model="occupancyTo" format="compact" class="w-40" :min-value="occupancyFrom" :max-value="currentDate" />
+        <DropdownMenu><DropdownMenuTrigger as-child><Button type="button" class="h-12 min-w-28 gap-4 px-6 py-0">Export <IconCaretDown class="-mr-1.5 size-5" /></Button></DropdownMenuTrigger><DropdownMenuContent class="w-(--reka-dropdown-menu-trigger-width) min-w-(--reka-dropdown-menu-trigger-width)"><DropdownMenuItem @select="exportOccupancy('csv')">CSV</DropdownMenuItem><DropdownMenuItem @select="exportOccupancy('pdf')">PDF</DropdownMenuItem><DropdownMenuItem @select="exportOccupancy('xlsx')">Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </div></div>
       <div class="mt-10 flex flex-wrap items-center justify-between gap-6">
         <h3 class="text-body2 text-gray-700">Occupancy Rate</h3>
