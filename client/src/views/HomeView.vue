@@ -75,7 +75,7 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
     <!-- About: one screen on desktop; photos shrink so the full description fits (a very long one grows the section) -->
     <section data-scroll-section id="about" aria-labelledby="about-title" class="bg-bg pt-10 pb-10 lg:pt-29 lg:pb-25 desktop:grid desktop:min-h-screen-nav desktop:grid-rows-fill desktop:py-10">
       <div class="mx-auto w-full max-w-288 px-4">
-        <h2 id="about-title" class="font-serif text-h3 text-green-800 lg:text-h2">{{ hotel.name }}</h2>
+        <h2 id="about-title" class="font-serif text-h3 text-green-800 lg:text-h2 desktop:text-h3 desktop-xl:text-h2">{{ hotel.name }}</h2>
         <div class="mt-10 lg:mt-13 lg:pl-48 desktop:mt-6 desktop:pl-0">
           <div class="flex flex-col gap-6 text-body1 text-gray-700">
             <p v-for="paragraph in aboutParagraphs" :key="paragraph">{{ paragraph }}</p>
@@ -85,7 +85,7 @@ const autoSlide = useIntervalFn(() => showTestimonial(activeTestimonial.value + 
 
       <!-- Desktop: photos fill the space left in the screen, between their mobile and Figma sizes.
            They are positioned inside 4:5 slides so they never stretch the row themselves. -->
-      <Carousel :opts="{ loop: true, align: 'center', startIndex: 2 }" aria-label="Hotel photos" class="mt-10 lg:mt-33.5 desktop:mt-8 desktop:min-h-56.25 desktop:*:data-[slot=carousel-content]:h-full">
+      <Carousel :opts="{ loop: true, align: 'center', startIndex: 2 }" aria-label="Hotel photos" class="mt-10 min-w-0 lg:mt-33.5 desktop:mt-8 desktop:min-h-56.25 desktop:*:data-[slot=carousel-content]:h-full">
         <CarouselContent class="-ml-2 lg:-ml-4 desktop:h-full desktop:items-center">
           <CarouselItem v-for="(photo, index) in sliderPhotos" :key="index" class="basis-auto pl-2 lg:pl-4 desktop:relative desktop:ml-4 desktop:aspect-4/5 desktop:h-full desktop:max-h-125 desktop:pl-0">
             <img :src="photo.src" :alt="photo.alt" width="400" height="500" loading="lazy" decoding="async" draggable="false" class="h-56.25 w-45 object-cover lg:h-125 lg:w-100 desktop:absolute desktop:inset-0 desktop:size-full">
