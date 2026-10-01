@@ -2,6 +2,8 @@
 
 Hotel booking monorepo: **Spring Boot** API + **Vue 3** client + **Supabase** (PostgreSQL / Auth).
 
+Analytics dashboard mock data date period 01/04/2026-30/09/2026.
+
 ## Structure
 
 ```

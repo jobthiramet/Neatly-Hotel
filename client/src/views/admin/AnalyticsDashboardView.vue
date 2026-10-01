@@ -175,7 +175,7 @@ function downloadCsv(rows: string[][], filename: string) {
     <section class="grid gap-4 xl:grid-cols-2">
       <article class="rounded-sm border border-gray-300 bg-white p-6 lg:p-10">
         <div class="flex items-center justify-between gap-4"><h2 class="text-h5 text-gray-600">Room Availability</h2>
-          <Select v-model="roomPeriod"><SelectTrigger class="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="month">This month</SelectItem><SelectItem value="week">This week</SelectItem><SelectItem value="today">Today</SelectItem></SelectContent></Select>
+          <Select v-model="roomPeriod"><SelectTrigger class="w-40 pr-2.5 pl-4"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="month">This month</SelectItem><SelectItem value="week">This week</SelectItem><SelectItem value="today">Today</SelectItem></SelectContent></Select>
         </div>
         <div class="mt-8 flex flex-col items-center gap-4 lg:flex-row lg:items-end lg:justify-between">
           <svg viewBox="0 0 220 220" role="img" aria-label="Room availability" class="size-60 shrink-0 -rotate-90">
@@ -192,7 +192,7 @@ function downloadCsv(rows: string[][], filename: string) {
 
       <article class="rounded-sm border border-gray-300 bg-white p-6 lg:p-10">
         <div class="flex items-center justify-between gap-4"><h2 class="text-h5 text-gray-600">Booking Trends by Day</h2>
-          <Select v-model="bookingPeriod"><SelectTrigger class="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="month">This month</SelectItem><SelectItem value="last-month">Last month</SelectItem><SelectItem value="last-two-months">Last 2 months</SelectItem></SelectContent></Select>
+          <Select v-model="bookingPeriod"><SelectTrigger class="w-40 pr-2.5 pl-4"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="month">This month</SelectItem><SelectItem value="last-month">Last month</SelectItem><SelectItem value="last-two-months">Last 2 months</SelectItem></SelectContent></Select>
         </div>
         <div class="mt-10 flex h-60 gap-3"><div class="flex shrink-0 flex-col justify-between pb-7 text-body3 text-gray-600"><span v-for="value in [100, 80, 60, 40, 20, 0]" :key="value">{{ value }}%</span></div>
           <div class="relative grid flex-1 grid-cols-7"><div aria-hidden="true" class="pointer-events-none absolute inset-0 flex flex-col justify-between pb-7"><span v-for="value in 6" :key="value" class="block border-t border-gray-300" /></div>
@@ -211,7 +211,7 @@ function downloadCsv(rows: string[][], filename: string) {
 
     <section class="rounded-sm border border-gray-300 bg-white p-6 lg:p-10">
       <div class="flex flex-wrap items-center justify-between gap-6"><h2 class="text-h5 text-gray-600">Occupancy &amp; Guest</h2><div class="flex flex-wrap items-center gap-3">
-        <span class="text-body2 text-gray-600">View by</span><Select v-model="occupancyView"><SelectTrigger class="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="overall">Overall</SelectItem><SelectItem value="room-type">Room type</SelectItem></SelectContent></Select>
+        <span class="text-body2 text-gray-600">View by</span><Select v-model="occupancyView"><SelectTrigger class="w-36 pr-2.5 pl-4"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="overall">Overall</SelectItem><SelectItem value="room-type">Room type</SelectItem></SelectContent></Select>
         <DatePicker v-model="occupancyFrom" format="compact" class="w-40" :min-value="mockStart" :max-value="occupancyTo" /><span class="text-body2 text-gray-600">to</span><DatePicker v-model="occupancyTo" format="compact" class="w-40" :min-value="occupancyFrom" :max-value="currentDate" /><Button type="button" class="min-w-28" @click="exportOccupancy">Export</Button>
       </div></div>
       <div class="mt-10 flex flex-wrap items-center justify-between gap-6">
@@ -250,7 +250,7 @@ function downloadCsv(rows: string[][], filename: string) {
     </div></section>
 
     <section class="rounded-sm border border-gray-300 bg-white p-6 lg:p-10"><div class="flex flex-wrap items-center justify-between gap-6"><h2 class="text-h5 text-gray-600">Website traffic</h2><div class="flex flex-wrap gap-3">
-      <Select v-model="trafficPage"><SelectTrigger class="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All pages</SelectItem><SelectItem value="home">Home</SelectItem><SelectItem v-for="room in rooms" :key="room.id" :value="room.id">{{ room.name }}</SelectItem></SelectContent></Select>
+      <Select v-model="trafficPage"><SelectTrigger class="w-40 pr-2.5 pl-4"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All pages</SelectItem><SelectItem value="home">Home</SelectItem><SelectItem v-for="room in rooms" :key="room.id" :value="room.id">{{ room.name }}</SelectItem></SelectContent></Select>
       <button v-for="period in [{ value: 'realtime', label: 'Real-time' }, { value: 'yesterday', label: 'Yesterday' }, { value: 'week', label: 'Last 7 days' }, { value: 'month', label: 'Last 30 days' }]" :key="period.value" type="button" :class="['h-12 rounded-sm border px-4 text-body2', trafficPeriod === period.value ? 'border-orange-400 bg-orange-100 text-orange-500' : 'border-gray-400 bg-white text-gray-800']" @click="trafficPeriod = period.value">{{ period.label }}</button>
     </div></div><div class="mt-8"><AnalyticsLineChart :labels="trafficTrend.labels" :values="trafficTrend.values" :max="trafficScale.max" :step="trafficScale.step" :empty="!trafficTrend.values.length" /></div></section>
   </div>
