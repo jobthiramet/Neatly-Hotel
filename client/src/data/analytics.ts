@@ -1,8 +1,8 @@
-import { parseDate, today } from '@internationalized/date'
+import { parseDate } from '@internationalized/date'
 import type { AnalyticsMetric, AnalyticsResponse } from '@/api/analytics'
 
-export const mockToday = today('Asia/Bangkok')
-export const mockStart = mockToday.set({ day: 1 }).subtract({ months: 5 })
+export const mockStart = parseDate('2026-04-01')
+export const mockToday = parseDate('2026-09-30')
 export const mockRoomTypes = [
   { id: 'superior-garden-view', name: 'Superior Garden View', capacity: 12 },
   { id: 'deluxe', name: 'Deluxe', capacity: 16 },
