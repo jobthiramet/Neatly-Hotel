@@ -22,6 +22,15 @@
   }
 }
 
+/* Desktop, but only once there's room for the full type scale (laptops use a smaller step). */
+@custom-variant desktop-xl {
+  @variant lg {
+    @media (hover: hover) and (pointer: fine) and (width >= 1920px) {
+      @slot;
+    }
+  }
+}
+
 /* One screen minus the navbar; later lines win where supported. */
 @utility min-h-screen-nav {
   min-height: calc(100vh - var(--spacing-navbar));
