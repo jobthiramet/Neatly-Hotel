@@ -5,9 +5,15 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -24,9 +30,31 @@ public class GlobalExceptionHandler {
 			MethodArgumentNotValidException ex,
 			HttpServletRequest request) {
 		List<String> details = ex.getBindingResult().getFieldErrors().stream()
-				.map(error -> error.getField() + ": " + error.getDefaultMessage())
+				// Type conversion failures (e.g. a malformed date query param) would otherwise leak Java type names.
+				.map(error -> error.getField() + ": " + (error.isBindingFailure() ? "invalid value" : error.getDefaultMessage()))
 				.toList();
 		return build(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), details);
+	}
+
+	@ExceptionHandler({
+			HttpMessageNotReadableException.class,
+			MethodArgumentTypeMismatchException.class,
+			MissingServletRequestParameterException.class })
+	public ResponseEntity<ErrorResponse> handleUnreadable(Exception ex, HttpServletRequest request) {
+		return build(HttpStatus.BAD_REQUEST, "Malformed request", request.getRequestURI(), List.of());
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ErrorResponse> handleUploadTooLarge(
+			MaxUploadSizeExceededException ex,
+			HttpServletRequest request) {
+		return build(HttpStatus.CONTENT_TOO_LARGE, "File exceeds maximum upload size", request.getRequestURI(), List.of());
+	}
+
+	@ExceptionHandler({ MissingServletRequestPartException.class, MultipartException.class })
+	public ResponseEntity<ErrorResponse> handleBadMultipart(Exception ex, HttpServletRequest request) {
+		return build(HttpStatus.BAD_REQUEST, "Invalid multipart request", request.getRequestURI(),
+				List.of(ex.getMessage() == null ? "unknown" : ex.getMessage()));
 	}
 
 	@ExceptionHandler(Exception.class)

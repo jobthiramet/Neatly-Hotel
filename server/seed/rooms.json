@@ -1,0 +1,194 @@
+{
+  "_comment": "Six room types from Figma (see README 'Seeding rooms'). Only Superior Garden View is fully specified in Figma; the other rooms reuse its values and share three hotel photos as placeholders. Images are in seed/rooms/.",
+  "rooms": [
+    {
+      "name": "Superior Garden View",
+      "bedType": "DOUBLE",
+      "sizeSqm": 32,
+      "capacity": 2,
+      "pricePerNight": 3000.0,
+      "promotionPrice": 2500.0,
+      "description": "Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.",
+      "amenities": [
+        "Safe in Room",
+        "Air Conditioning",
+        "High speed internet connection",
+        "Hairdryer",
+        "Shower",
+        "Bathroom amenities",
+        "Lamp",
+        "Minibar",
+        "Telephone",
+        "Ironing board",
+        "A floor only accessible via a guest room key",
+        "Alarm clock",
+        "Bathrobe"
+      ],
+      "mainImage": "main-superior-garden-view.webp",
+      "gallery": [
+        "sgv-gallery-1.webp",
+        "sgv-gallery-2.webp",
+        "sgv-gallery-3.webp",
+        "sgv-gallery-4.webp",
+        "sgv-gallery-5.webp",
+        "sgv-gallery-6.webp",
+        "sgv-gallery-7.webp"
+      ]
+    },
+    {
+      "name": "Deluxe",
+      "bedType": "DOUBLE",
+      "sizeSqm": 32,
+      "capacity": 2,
+      "pricePerNight": 3000.0,
+      "promotionPrice": 2500.0,
+      "description": "Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.",
+      "amenities": [
+        "Safe in Room",
+        "Air Conditioning",
+        "High speed internet connection",
+        "Hairdryer",
+        "Shower",
+        "Bathroom amenities",
+        "Lamp",
+        "Minibar",
+        "Telephone",
+        "Ironing board",
+        "A floor only accessible via a guest room key",
+        "Alarm clock",
+        "Bathrobe"
+      ],
+      "mainImage": "main-deluxe.webp",
+      "gallery": [
+        "main-deluxe.webp",
+        "sgv-gallery-1.webp",
+        "sgv-gallery-2.webp",
+        "sgv-gallery-3.webp"
+      ]
+    },
+    {
+      "name": "Superior",
+      "bedType": "DOUBLE",
+      "sizeSqm": 32,
+      "capacity": 2,
+      "pricePerNight": 3000.0,
+      "promotionPrice": 2500.0,
+      "description": "Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.",
+      "amenities": [
+        "Safe in Room",
+        "Air Conditioning",
+        "High speed internet connection",
+        "Hairdryer",
+        "Shower",
+        "Bathroom amenities",
+        "Lamp",
+        "Minibar",
+        "Telephone",
+        "Ironing board",
+        "A floor only accessible via a guest room key",
+        "Alarm clock",
+        "Bathrobe"
+      ],
+      "mainImage": "main-superior.webp",
+      "gallery": [
+        "main-superior.webp",
+        "sgv-gallery-1.webp",
+        "sgv-gallery-2.webp",
+        "sgv-gallery-3.webp"
+      ]
+    },
+    {
+      "name": "Premier Sea View",
+      "bedType": "DOUBLE",
+      "sizeSqm": 32,
+      "capacity": 2,
+      "pricePerNight": 3000.0,
+      "promotionPrice": 2500.0,
+      "description": "Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.",
+      "amenities": [
+        "Safe in Room",
+        "Air Conditioning",
+        "High speed internet connection",
+        "Hairdryer",
+        "Shower",
+        "Bathroom amenities",
+        "Lamp",
+        "Minibar",
+        "Telephone",
+        "Ironing board",
+        "A floor only accessible via a guest room key",
+        "Alarm clock",
+        "Bathrobe"
+      ],
+      "mainImage": "main-premier-sea-view.webp",
+      "gallery": [
+        "main-premier-sea-view.webp",
+        "sgv-gallery-1.webp",
+        "sgv-gallery-2.webp",
+        "sgv-gallery-3.webp"
+      ]
+    },
+    {
+      "name": "Supreme",
+      "bedType": "DOUBLE",
+      "sizeSqm": 32,
+      "capacity": 2,
+      "pricePerNight": 3000.0,
+      "promotionPrice": 2500.0,
+      "description": "Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.",
+      "amenities": [
+        "Safe in Room",
+        "Air Conditioning",
+        "High speed internet connection",
+        "Hairdryer",
+        "Shower",
+        "Bathroom amenities",
+        "Lamp",
+        "Minibar",
+        "Telephone",
+        "Ironing board",
+        "A floor only accessible via a guest room key",
+        "Alarm clock",
+        "Bathrobe"
+      ],
+      "mainImage": "main-supreme.webp",
+      "gallery": [
+        "main-supreme.webp",
+        "sgv-gallery-1.webp",
+        "sgv-gallery-2.webp",
+        "sgv-gallery-3.webp"
+      ]
+    },
+    {
+      "name": "Suite",
+      "bedType": "DOUBLE",
+      "sizeSqm": 32,
+      "capacity": 2,
+      "pricePerNight": 3000.0,
+      "promotionPrice": 2500.0,
+      "description": "Rooms (36sqm) with full garden views, 1 single bed, bathroom with bathtub & shower.",
+      "amenities": [
+        "Safe in Room",
+        "Air Conditioning",
+        "High speed internet connection",
+        "Hairdryer",
+        "Shower",
+        "Bathroom amenities",
+        "Lamp",
+        "Minibar",
+        "Telephone",
+        "Ironing board",
+        "A floor only accessible via a guest room key",
+        "Alarm clock",
+        "Bathrobe"
+      ],
+      "mainImage": "main-suite.webp",
+      "gallery": [
+        "main-suite.webp",
+        "sgv-gallery-1.webp",
+        "sgv-gallery-2.webp",
+        "sgv-gallery-3.webp"
+      ]
+    }
+  ]
+}

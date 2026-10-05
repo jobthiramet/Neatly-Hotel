@@ -1,0 +1,10 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "client", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "client", "run", "dev"], "port": 5173 },
+    { "name": "server", "runtimeExecutable": "server\\mvnw.cmd", "runtimeArgs": ["-f", "server\\pom.xml", "spring-boot:run"], "port": 8080, "url": "http://localhost:8080" },
+    { "name": "server-8081", "runtimeExecutable": "server\\mvnw.cmd", "runtimeArgs": ["-f", "server\\pom.xml", "spring-boot:run", "-Dspring-boot.run.arguments=--server.port=8081 --app.client-origin=http://localhost:5174"], "port": 8081, "url": "http://localhost:8081" },
+    { "name": "server-supabase-8081", "runtimeExecutable": "powershell", "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "$env:SERVER_PORT='8081'; $env:SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE='2'; $env:SUPABASE_URL='https://cbixotklnxatvkfaqtiw.supabase.co'; $env:APP_CLIENT_ORIGIN='http://localhost:5174'; Set-Location server; & .\\run-supabase.ps1"], "port": 8081, "url": "http://localhost:8081" },
+    { "name": "client-5174", "runtimeExecutable": "cmd", "runtimeArgs": ["/c", "set VITE_API_BASE_URL=http://localhost:8081/api&& npm --prefix client run dev -- --port 5174 --strictPort"], "port": 5174 }
+  ]
+}

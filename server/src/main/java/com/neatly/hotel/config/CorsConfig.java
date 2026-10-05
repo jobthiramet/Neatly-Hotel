@@ -1,5 +1,6 @@
 package com.neatly.hotel.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import java.util.List;
 
 import org.springframework.context.annotation.Bean;
@@ -12,9 +13,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class CorsConfig {
 
 	@Bean
-	public CorsConfigurationSource corsConfigurationSource() {
+	public CorsConfigurationSource corsConfigurationSource(
+			@Value("${app.client-origin:http://localhost:5173}") String clientOrigin) {
 		CorsConfiguration config = new CorsConfiguration();
-		config.setAllowedOrigins(List.of("http://localhost:5173"));
+		config.setAllowedOrigins(List.of(clientOrigin));
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("*"));
 		config.setAllowCredentials(true);
