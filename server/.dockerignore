@@ -1,0 +1,7 @@
+.target
+.env
+*.md
+seed
+seed-rooms.ps1
+run-supabase.ps1
+.mvn/wrapper/maven-wrapper.jar
